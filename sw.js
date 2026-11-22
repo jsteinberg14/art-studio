@@ -1,6 +1,6 @@
 // Keeps the app working offline. Change VERSION whenever you update files,
 // so phones and iPads pick up the new version.
-const VERSION = 'art-studio-v18';
+const VERSION = 'art-studio-v20';
 const FILES = [
   './', './index.html', './manifest.webmanifest', './css/styles.css',
   './js/app.js', './js/db.js', './js/draw.js', './js/feedback.js', './js/icons.js',

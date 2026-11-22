@@ -177,10 +177,12 @@ const friendById = (id) => FRIENDS.find((f) => f.id === id) || { id, name: 'You'
 const avatar = (person, cls = '') => `<span class="avatar tone-${person.tone} ${cls}" aria-hidden="true">${esc(person.name.charAt(0))}</span>`;
 
 /* ---------- Screens ---------- */
+const sparkSvg = (cls) => `<svg class="spark ${cls}" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 0C13 7 17 11 24 12C17 13 13 17 12 24C11 17 7 13 0 12C7 11 11 7 12 0Z"/></svg>`;
+
 async function homeScreen() {
   const pieces = await db.allPieces();
   const favorites = pieces.filter((p) => p.favorite);
-  const spark = (cls) => `<svg class="spark ${cls}" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 0C13 7 17 11 24 12C17 13 13 17 12 24C11 17 7 13 0 12C7 11 11 7 12 0Z"/></svg>`;
+  const spark = sparkSvg;
   const tile = (href, tone, name, sub, ic, extra = '') => `<li${extra ? ` class="${extra}"` : ''}><a class="link-tile tile-${tone}" href="${href}"><span class="tile-disc">${icon(ic)}</span><span class="tile-text"><span class="tile-name">${name}</span><span class="tile-sub">${sub}</span></span></a></li>`;
   return frag(`
     <div class="home">
@@ -227,6 +229,7 @@ async function snapScreen() {
       <div><p class="kicker">Get ideas to make it even better</p><h1 tabindex="-1">Snap your art</h1></div>
     </header>
     <button type="button" class="snap-card" data-action="snap">
+      ${sparkSvg('spark-c')}${sparkSvg('spark-d')}
       <span class="snap-circle">${icon('camera')}</span>
       <span class="snap-title">Snap your art</span>
       <span class="snap-sub">Take or choose a photo</span>

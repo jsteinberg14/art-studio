@@ -6,6 +6,7 @@ It is a web app that installs on an iPhone or iPad home screen and opens full sc
 
 ## Screens
 
+- **Look:** every screen shares the Home page style: thick dark outlines, chunky shadows, paint-pot colors, a rainbow ribbon under each screen's title, and tilted snapshot frames for your art.
 - **Home:** small links to everything: Snap your art, Museum, Blank canvas, Ideas, Friends, and Settings. Your favorite pieces sit below the links. To favorite a piece, open it from the Museum and tap the heart.
 - **Snap:** the second tab. Take or choose a photo of your art and get "You did well" and "Try this next" feedback. Your latest feedback and recent museum pieces are here too.
 - **Send photo:** on a piece, tap Send photo to open the iPhone share sheet and send the picture in Messages (or any app) as a photo. On a computer it saves the picture instead. ("Post to Friends" adds it to the Friends feed.)
