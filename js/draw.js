@@ -8,6 +8,19 @@ export const SIZE_STEPS = [
   { label: 'Extra large', px: 28 },
 ];
 
+// The blend tool smudges colors together. It has its own, bigger sizes and three strengths.
+export const BLEND_SIZES = [
+  { label: 'Small', px: 16 },
+  { label: 'Medium', px: 28 },
+  { label: 'Large', px: 44 },
+  { label: 'Extra large', px: 68 },
+];
+export const BLEND_STRENGTHS = [
+  { label: 'Light', amount: 0.3 },
+  { label: 'Medium', amount: 0.55 },
+  { label: 'Strong', amount: 0.8 },
+];
+
 const MAX_PIXELS = 1400;
 const UNDO_LIMIT = 10;
 
@@ -26,9 +39,13 @@ export class Drawing {
     this.bg.setAttribute('aria-hidden', 'true');
     this.temp.setAttribute('aria-hidden', 'true');
     stage.replaceChildren(this.bg, this.ink, this.temp);
+    this.inkCtx = this.ink.getContext('2d', { willReadFrequently: true });
     this.tool = 'pen';
     this.color = '#F28B82';
     this.sizePx = 4;
+    this.strength = BLEND_STRENGTHS[1].amount;
+    this.carry = null;
+    this.maskCache = null;
     this.scale = 1;
     this.undoStack = [];
     this.dirty = false;
@@ -70,8 +87,9 @@ export class Drawing {
     if (img) { g.drawImage(img, 0, 0, pw, ph); img.release(); }
   }
 
-  setTool(tool, sizePx, color) {
+  setTool(tool, sizePx, color, strength) {
     this.tool = tool; this.sizePx = sizePx; this.color = color;
+    if (strength !== undefined) this.strength = strength;
   }
 
   point(e) {
@@ -111,6 +129,7 @@ export class Drawing {
     const p = this.point(e);
     this.points = [p];
     if (this.tool === 'marker') { this.drawMarkerPreview(); return; }
+    if (this.tool === 'blend') { this.blendBegin(p); return; }
     const ctx = this.brush(this.ink.getContext('2d'));
     ctx.beginPath();
     ctx.arc(p.x, p.y, ctx.lineWidth / 2, 0, Math.PI * 2);
@@ -125,6 +144,14 @@ export class Drawing {
     if (this.tool === 'marker') {
       for (const ev of list) this.points.push(this.point(ev));
       this.drawMarkerPreview();
+      return;
+    }
+    if (this.tool === 'blend') {
+      for (const ev of list) {
+        const p = this.point(ev);
+        this.blendAlong(this.points[this.points.length - 1], p);
+        this.points.push(p);
+      }
       return;
     }
     const ctx = this.brush(this.ink.getContext('2d'));
@@ -153,6 +180,7 @@ export class Drawing {
     }
     this.points = null;
     this.pointerId = null;
+    this.carry = null;
     this.dirty = true;
   }
 
@@ -179,6 +207,69 @@ export class Drawing {
     const last = pts[pts.length - 1];
     ctx.lineTo(last.x, last.y);
     ctx.stroke();
+  }
+
+  // Blend (smudge): the finger picks up the paint under it and drags it along,
+  // mixing it into what it touches. A soft round mask keeps the edges gentle.
+  blendDiameter() { return Math.max(6, Math.round(this.sizePx * this.scale)); }
+
+  blendMask(d) {
+    if (this.maskCache && this.maskCache.d === d) return this.maskCache.mask;
+    const mask = new Float32Array(d * d);
+    const r = d / 2;
+    for (let y = 0; y < d; y++) {
+      for (let x = 0; x < d; x++) {
+        const dist = Math.hypot(x + 0.5 - r, y + 0.5 - r) / r;
+        const t = dist >= 1 ? 0 : Math.min(1, (1 - dist) / 0.5);
+        mask[y * d + x] = t * t * (3 - 2 * t);
+      }
+    }
+    this.maskCache = { d, mask };
+    return mask;
+  }
+
+  blendBegin(p) {
+    const d = this.blendDiameter();
+    this.carry = this.inkCtx.getImageData(Math.round(p.x - d / 2), Math.round(p.y - d / 2), d, d);
+  }
+
+  blendStep(p) {
+    const d = this.blendDiameter();
+    if (!this.carry || this.carry.width !== d) { this.blendBegin(p); return; }
+    const x0 = Math.round(p.x - d / 2), y0 = Math.round(p.y - d / 2);
+    const under = this.inkCtx.getImageData(x0, y0, d, d);
+    const u = under.data, c = this.carry.data;
+    const out = new Uint8ClampedArray(u);
+    const mask = this.blendMask(d);
+    const deposit = this.strength * 0.5;
+    const pickup = (1 - this.strength) * 0.35 + 0.05;
+    for (let i = 0, k = 0; i < mask.length; i++, k += 4) {
+      const w = mask[i];
+      if (w <= 0) continue;
+      const ua = u[k + 3] / 255, ca = c[k + 3] / 255;
+      const a = deposit * w, b = pickup * w;
+      const na = ua * (1 - a) + ca * a;
+      if (na < 0.004) { out[k] = out[k + 1] = out[k + 2] = out[k + 3] = 0; } else {
+        for (let j = 0; j < 3; j++) out[k + j] = Math.round((u[k + j] * ua * (1 - a) + c[k + j] * ca * a) / na);
+        out[k + 3] = Math.round(na * 255);
+      }
+      const nc = ca * (1 - b) + ua * b;
+      if (nc < 0.004) { c[k] = c[k + 1] = c[k + 2] = c[k + 3] = 0; } else {
+        for (let j = 0; j < 3; j++) c[k + j] = Math.round((c[k + j] * ca * (1 - b) + u[k + j] * ua * b) / nc);
+        c[k + 3] = Math.round(nc * 255);
+      }
+    }
+    this.inkCtx.putImageData(new ImageData(out, d, d), x0, y0);
+  }
+
+  blendAlong(from, to) {
+    const d = this.blendDiameter();
+    const dist = Math.hypot(to.x - from.x, to.y - from.y);
+    const steps = Math.min(40, Math.max(1, Math.ceil(dist / Math.max(1, d * 0.12))));
+    for (let i = 1; i <= steps; i++) {
+      const t = i / steps;
+      this.blendStep({ x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t });
+    }
   }
 
   undo() {

@@ -6,11 +6,15 @@ It is a web app that installs on an iPhone or iPad home screen and opens full sc
 
 ## Screens
 
-- **Snap:** take or choose a photo of your art and get "You did well" and "Try this next" feedback.
-- **Museum:** every saved piece, two to a row, with space around each one.
-- **Ideas:** drawing ideas based on the art in your museum.
-- **Friends:** a feed with likes, favorites, and kind comments. This is a preview that only works on this device (see "What is a preview" below).
-- **Draw on it:** pen, marker, paint brush, and eraser, with rainbow and neutral colors, shades, sizes, and undo.
+- **Home:** small links to everything: Snap your art, Museum, Blank canvas, Ideas, Friends, and Settings. Your favorite pieces sit below the links. To favorite a piece, open it from the Museum and tap the heart.
+- **Snap:** the second tab. Take or choose a photo of your art and get "You did well" and "Try this next" feedback. Your latest feedback and recent museum pieces are here too.
+- **Send photo:** on a piece, tap Send photo to open the iPhone share sheet and send the picture in Messages (or any app) as a photo. On a computer it saves the picture instead. ("Post to Friends" adds it to the Friends feed.)
+- **Museum:** every saved piece, two to a row, with space around each one. Favorited pieces show a small heart.
+- **Blank canvas:** the middle button on the bottom bar opens an empty page to draw on. It also has a **Blend** tool that smudges colors together, with four sizes and three strengths (Light, Medium, Strong). Blend isn't on photo canvases, because it can only smudge your drawing, not the photo under it.
+- **Ideas:** random drawing ideas ("Try it" opens a completely blank canvas), like silly characters, places, and quick challenges. About one refresh in four, one of the three ideas is based on a piece in your museum.
+- **Friends:** an invite-only feed for families you know, with likes, favorites, and kind comments. It stays in on-device preview mode until you set it up (see [SETUP-FRIENDS.md](SETUP-FRIENDS.md)).
+- **Grown-ups:** a PIN-protected area where parents sign in, give permission, add kids, connect with other families, and review reported comments.
+- **Draw on it:** pen, marker, paint brush, and eraser (plus Blend on a blank canvas), with rainbow and neutral colors, shades, sizes, and undo.
 - **Settings:** color scheme (sky blue, sunny yellow, or bubblegum pink) and feedback style (bubbly or clear).
 
 ## Put it on GitHub Pages
@@ -46,17 +50,15 @@ Art, posts, and comments are saved on the device in the browser's storage. They 
 - Art doesn't move between devices. An iPad and an iPhone each have their own museum.
 - To keep a favorite piece forever, take a screenshot of it on the Museum screen.
 
-## What is a preview
-
-Two parts work on the device today but need more setup to become fully real.
+## Feedback and Friends
 
 **Feedback.** The feedback comes from a helper built into the app (`js/feedback.js`). It measures colors, light and dark, and detail, then picks friendly suggestions. It isn't a real AI model. To use a real AI model later, you'd need a small server that keeps the AI service key secret, because a key placed in this public code could be copied by anyone. Then you'd replace `analyzeImage()` with a call to that server.
 
-**Friends.** The friends, their posts, and their comments are samples, and sharing only adds a post on this device. Real sharing between kids needs accounts, a server, and moderation. In the United States, a service that collects personal information from children under 13 also has to follow COPPA, which requires verified parent consent. Plan for that before turning on real sharing.
+**Friends.** Until it's set up, Friends shows sample friends, and sharing only adds a post on this device. [SETUP-FRIENDS.md](SETUP-FRIENDS.md) walks through turning on real sharing with a free Supabase server, including the parent permission step that COPPA requires for children under 13.
 
 ## Kind comments
 
-Before a comment is posted, `js/kindness.js` checks it:
+Before a comment is posted, the app checks it with `js/kindness.js`, and the server checks it again with the same rules, so the check can't be skipped:
 
 - Unkind words and put-downs are blocked, including spaced-out and number-swapped spellings.
 - Phone numbers, email addresses, links, schools, addresses, and other apps are blocked.
@@ -64,18 +66,19 @@ Before a comment is posted, `js/kindness.js` checks it:
 - Quick comments let kids reply without typing.
 - The artist can delete any comment on their post and turn comments off. Anyone can report a comment.
 
-Word filters miss things, so treat this as a first layer. A grown-up should review reported comments once real sharing exists.
+Word filters miss things, so treat this as a first layer. Reported comments show up in the grown-up area for the artist's parent to review.
 
 ## Accessibility
 
 The app was tested against WCAG 2.2 Level AA, the standard used for ADA web accessibility. See [ACCESSIBILITY.md](ACCESSIBILITY.md) for the results and the checks still to do by hand.
 
-To rerun the automated check on a computer with Python:
+To rerun the automated checks on a computer with Python:
 
 ```
 pip install playwright
 python -m playwright install chromium
 python tools/a11y_check.py
+python tools/friends_check.py
 ```
 
 ## Files
@@ -85,15 +88,21 @@ python tools/a11y_check.py
 | `index.html` | The page that holds the app |
 | `css/styles.css` | Colors, type, and layout |
 | `js/app.js` | Screens, navigation, and buttons |
-| `js/draw.js` | The drawing canvas |
+| `js/draw.js` | The drawing canvas, including the blend tool |
 | `js/feedback.js` | The built-in feedback helper |
 | `js/kindness.js` | The comment filter |
-| `js/ideas.js` | Drawing ideas |
+| `js/ideas.js` | Random drawing ideas |
 | `js/db.js` | Saving on the device |
 | `js/sample.js` | Sample friends for the preview |
+| `js/friends.js` | The real Friends screens and the grown-up area |
+| `js/cloud.js` | Talks to the Supabase server |
+| `js/config.js` | Your Supabase settings |
+| `supabase/setup.sql` | The server setup script |
+| `privacy.html` | The privacy notice for parents |
+| `consent-form.html` | The printable parent permission form |
 | `js/icons.js` | Icons, so the app works offline |
 | `sw.js` | Offline support |
 | `manifest.webmanifest` | Home screen name and icon |
-| `tools/` | The accessibility check |
+| `tools/` | The accessibility checks and a test-only stand-in server |
 
 Icons are from [Tabler Icons](https://tabler.io/icons) (MIT License).

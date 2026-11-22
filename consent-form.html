@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Parent permission form – My Art Studio</title>
+  <style>
+    body { font-family: ui-rounded, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #2C2C2A; line-height: 1.55; max-width: 680px; margin: 0 auto; padding: 28px 22px 48px; }
+    h1 { font-size: 1.6rem; margin: 0 0 4px; }
+    h2 { font-size: 1.05rem; margin: 22px 0 6px; }
+    p, li { font-size: 1rem; }
+    .muted { color: #5F5E5A; }
+    .line { display: flex; align-items: flex-end; gap: 10px; margin-top: 26px; }
+    .line span { white-space: nowrap; font-weight: 700; }
+    .line i { flex: 1; border-bottom: 1.5px solid #2C2C2A; height: 1.4em; }
+    .print { margin-top: 28px; min-height: 48px; padding: 0 22px; border-radius: 999px; border: 0; background: #B5D4F4; color: #0C447C; font: inherit; font-weight: 700; cursor: pointer; }
+    .print:focus-visible { outline: 3px solid #0C447C; outline-offset: 2px; }
+    @media print { .print, .no-print { display: none; } body { padding: 0; } }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Parent permission for My Art Studio Friends</h1>
+    <p class="muted">Run by <span data-owner-name>the app owner</span><span data-owner-email-wrap>, <span data-owner-email></span></span></p>
+
+    <h2>What Friends does</h2>
+    <p>Friends lets your child share photos of their art with families you connect with, and leave likes and kind comments. Only families you approve can see anything your child shares.</p>
+
+    <h2>What Friends keeps</h2>
+    <ul>
+      <li>A first name or nickname you choose for your child, and a color</li>
+      <li>Photos of art your child shares, and the names they give them</li>
+      <li>Comments and likes your child leaves on friends’ art</li>
+      <li>Your name and email, so you can sign in and manage your family</li>
+    </ul>
+    <p>It doesn’t ask for last names, addresses, schools, birthdays, or location. It has no ads and no tracking, and it doesn’t sell or share information with anyone else. A comment filter blocks unkind words and personal details like phone numbers and links.</p>
+
+    <h2>Your choices</h2>
+    <p>At any time, in the app’s grown-up area, you can see and delete anything your child shared, stop sharing with any family, or delete your family from Friends completely. Deleting your family also deletes this form.</p>
+
+    <h2>Permission</h2>
+    <p>I am the parent or legal guardian of the child named below. I have read this form and the privacy notice. I give permission for my child to use Friends in My Art Studio as described above.</p>
+
+    <div class="line"><span>Child’s first name or nickname</span><i></i></div>
+    <div class="line"><span>Parent or guardian’s full name</span><i></i></div>
+    <div class="line"><span>Email you sign in with</span><i></i></div>
+    <div class="line"><span>Signature</span><i></i></div>
+    <div class="line"><span>Date</span><i></i></div>
+
+    <p class="no-print" style="margin-top:28px">No printer? Copy the “Permission” paragraph and the five lines onto paper by hand, sign it, and send a photo.</p>
+    <button type="button" class="print" onclick="window.print()">Print this form</button>
+  </main>
+  <script type="module">
+    import { OWNER_NAME, OWNER_EMAIL } from './js/config.js';
+    if (OWNER_NAME) document.querySelectorAll('[data-owner-name]').forEach((el) => { el.textContent = OWNER_NAME; });
+    if (OWNER_EMAIL) document.querySelectorAll('[data-owner-email]').forEach((el) => { el.textContent = OWNER_EMAIL; });
+    else document.querySelectorAll('[data-owner-email-wrap]').forEach((el) => el.remove());
+  </script>
+</body>
+</html>

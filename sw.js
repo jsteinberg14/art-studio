@@ -1,10 +1,11 @@
 // Keeps the app working offline. Change VERSION whenever you update files,
 // so phones and iPads pick up the new version.
-const VERSION = 'art-studio-v1';
+const VERSION = 'art-studio-v16';
 const FILES = [
   './', './index.html', './manifest.webmanifest', './css/styles.css',
   './js/app.js', './js/db.js', './js/draw.js', './js/feedback.js', './js/icons.js',
-  './js/ideas.js', './js/kindness.js', './js/sample.js',
+  './js/ideas.js', './js/kindness.js', './js/sample.js', './js/config.js', './js/cloud.js', './js/friends.js',
+  './privacy.html', './consent-form.html',
   './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png',
 ];
 

@@ -2,9 +2,11 @@ import { icon } from './icons.js';
 import * as db from './db.js';
 import { analyzeImage, loadImage } from './feedback.js';
 import { checkComment, QUICK_COMMENTS, MAX_COMMENT } from './kindness.js';
-import { Drawing, SIZE_STEPS } from './draw.js';
+import { Drawing, SIZE_STEPS, BLEND_SIZES, BLEND_STRENGTHS } from './draw.js';
 import { makeIdeas } from './ideas.js';
 import { FRIENDS, SAMPLE_POSTS, SAMPLE_COMMENTS } from './sample.js';
+import { cloudEnabled } from './cloud.js';
+import { createCloudFriends } from './friends.js';
 
 const APP_NAME = 'My Art Studio';
 const main = document.getElementById('main');
@@ -18,15 +20,20 @@ const THEMES = [
   { id: 'sky', name: 'Sky blue' },
   { id: 'sun', name: 'Sunny yellow' },
   { id: 'gum', name: 'Bubblegum pink' },
+  { id: 'bw', name: 'Black and white' },
 ];
 const VIBES = [
   { id: 'bubbly', name: 'Bubbly', example: 'Wow, your colors are super bright and bold!' },
   { id: 'clear', name: 'Clear', example: 'Your colors are bright and bold.' },
 ];
-const settings = Object.assign({ theme: 'sky', vibe: 'bubbly' }, readSettings());
+const SIZES = [
+  { id: 'normal', name: 'Standard', example: 'Regular text and color circles' },
+  { id: 'big', name: 'Bigger', example: 'Larger text and color circles on the canvas' },
+];
+const settings = Object.assign({ theme: 'sky', vibe: 'bubbly', size: 'normal' }, readSettings());
 function readSettings() { try { return JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}'); } catch (e) { return {}; } }
 function saveSettings() { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch (e) { /* private mode */ } }
-function applyTheme() { document.documentElement.dataset.theme = settings.theme; }
+function applyTheme() { document.documentElement.dataset.theme = settings.theme; document.documentElement.dataset.size = settings.size; }
 applyTheme();
 
 /* ---------- Helpers ---------- */
@@ -59,6 +66,15 @@ function pieceUrl(piece, which = 'thumb') {
   const key = `${piece.id}:${which}`;
   if (!urlCache.has(key)) urlCache.set(key, URL.createObjectURL(which === 'thumb' ? piece.thumb || piece.image : piece.image));
   return urlCache.get(key);
+}
+// The photo file is made when a piece opens, so the Send button can open the share sheet
+// straight from the tap. (iPhone only allows sharing right after a tap.)
+const shareFiles = new Map();
+function prepareShareFile(piece) {
+  const type = piece.image.type || 'image/jpeg';
+  const ext = type === 'image/png' ? 'png' : 'jpg';
+  const name = (piece.title || 'My art').replace(/[^\w\- ]+/g, '').trim().slice(0, 40) || 'My art';
+  shareFiles.set(piece.id, new File([piece.image], `${name}.${ext}`, { type }));
 }
 function forgetUrls(id) {
   for (const [k, url] of urlCache) if (!id || k.startsWith(`${id}:`)) { URL.revokeObjectURL(url); urlCache.delete(k); }
@@ -95,6 +111,7 @@ let pending = null; // a photo that was just taken: { blob, url, feedback }
 let canvasJob = null; // what the canvas is drawing on: { blob, title, idea, back }
 let drawing = null;
 let ideaSeed = Math.floor(Math.random() * 100000);
+let lastScreenHash = '#/home'; // where the blank canvas returns to
 
 /* ---------- Dialog ---------- */
 function ask({ title, body = '', ok = 'OK', cancel = 'Cancel', danger = false, field = null, choices = null }) {
@@ -162,16 +179,42 @@ const avatar = (person, cls = '') => `<span class="avatar tone-${person.tone} ${
 /* ---------- Screens ---------- */
 async function homeScreen() {
   const pieces = await db.allPieces();
-  const latest = pieces.find((p) => p.feedback);
+  const favorites = pieces.filter((p) => p.favorite);
   return frag(`
     <header class="screen-head">
       <div><p class="kicker">Welcome back</p><h1 tabindex="-1">Your studio</h1></div>
-      <a class="icon-btn" href="#/settings" aria-label="Settings">${icon('settings')}</a>
+    </header>
+    <nav aria-label="Everything in your studio">
+      <ul class="link-grid" role="list">
+        <li><a class="link-tile link-tile-snap" href="#/snap">${icon('camera')}<span>Snap your art</span></a></li>
+        <li><a class="link-tile" href="#/museum">${icon('photo')}<span>Museum</span></a></li>
+        <li><a class="link-tile" href="#/canvas" data-action="blank-canvas">${icon('blank')}<span>Blank canvas</span></a></li>
+        <li><a class="link-tile" href="#/ideas">${icon('bulb')}<span>Ideas</span></a></li>
+        <li><a class="link-tile" href="#/friends">${icon('users')}<span>Friends</span></a></li>
+        <li><a class="link-tile" href="#/settings">${icon('settings')}<span>Settings</span></a></li>
+        ${cloudEnabled ? `<li><a class="link-tile" href="#/parent">${icon('lock')}<span>Grown-ups</span></a></li>` : ''}
+      </ul>
+    </nav>
+    <section class="block" aria-labelledby="fav-h">
+      <div class="section-row"><h2 id="fav-h" class="section-label">Your favorites</h2>
+        ${favorites.length > 6 ? '<a href="#/museum" class="text-link" aria-label="See all your art in the museum">See all</a>' : ''}</div>
+      ${favorites.length
+        ? `<ul class="thumb-row fav-row" role="list">${favorites.slice(0, 6).map((p) => `<li><a href="#/piece/${p.id}" class="thumb-link"><img src="${pieceUrl(p)}" alt="${esc(p.title)}"></a></li>`).join('')}</ul>`
+        : `<p class="empty-note">Tap the heart on a piece in your museum and it shows up here.</p>`}
+    </section>`);
+}
+
+async function snapScreen() {
+  const pieces = await db.allPieces();
+  const latest = pieces.find((p) => p.feedback);
+  return frag(`
+    <header class="screen-head">
+      <div><p class="kicker">Get ideas to make it even better</p><h1 tabindex="-1">Snap your art</h1></div>
     </header>
     <button type="button" class="snap-card" data-action="snap">
       <span class="snap-circle">${icon('camera')}</span>
       <span class="snap-title">Snap your art</span>
-      <span class="snap-sub">Get ideas to make it even better</span>
+      <span class="snap-sub">Take or choose a photo</span>
     </button>
     <section class="block" aria-labelledby="latest-h">
       <h2 id="latest-h" class="section-label">Latest feedback</h2>
@@ -187,9 +230,9 @@ async function homeScreen() {
 }
 
 async function reviewScreen() {
-  if (!pending) { location.replace('#/home'); return homeScreen(); }
+  if (!pending) { location.replace('#/snap'); return snapScreen(); }
   return frag(`
-    ${backBar('Your art', '#/home', 'Back to your studio')}
+    ${backBar('Your art', '#/snap', 'Back to Snap')}
     <div class="photo-frame"><img src="${pending.url}" alt="The picture you just took of your art"></div>
     <section class="block" aria-labelledby="fb-h">
       <h2 id="fb-h" class="section-label">Feedback</h2>
@@ -223,8 +266,8 @@ async function museumScreen() {
       <p class="sub">${pieces.length} ${pieces.length === 1 ? 'piece' : 'pieces'}</p></div></header>
     <ul class="gallery" role="list">
       ${pieces.map((p) => `<li><a class="art-tile" href="#/piece/${p.id}">
-        <span class="art-frame"><img src="${pieceUrl(p)}" alt=""></span>
-        <span class="art-title">${esc(p.title)}</span>
+        <span class="art-frame"><img src="${pieceUrl(p)}" alt="">${p.favorite ? `<span class="fav-badge" aria-hidden="true">${icon('heart')}</span>` : ''}</span>
+        <span class="art-title">${esc(p.title)}${p.favorite ? '<span class="sr-only">, favorite</span>' : ''}</span>
         <span class="art-date">${fmtDate(p.createdAt)}</span></a></li>`).join('')}
     </ul>`);
 }
@@ -232,18 +275,25 @@ async function museumScreen() {
 async function pieceScreen(id) {
   const p = await db.getPiece(id);
   if (!p) return notFound('That piece isn’t in your museum anymore.', '#/museum', 'Go to your museum');
+  prepareShareFile(p);
   return frag(`
-    <header class="bar">
+    <header class="bar bar-two">
       <a class="icon-btn" href="#/museum" aria-label="Back to your museum">${icon('chevronLeft')}</a>
       <span class="bar-spacer"></span>
-      <button type="button" class="icon-btn" data-action="delete-piece" data-id="${p.id}" aria-label="Delete ${esc(p.title)}">${icon('trash')}</button>
+      <div class="head-actions">
+        <button type="button" class="icon-btn fav-btn" data-action="toggle-favorite" data-id="${p.id}" aria-pressed="${!!p.favorite}" aria-label="Favorite">${icon('heart')}</button>
+        <button type="button" class="icon-btn" data-action="delete-piece" data-id="${p.id}" aria-label="Delete ${esc(p.title)}">${icon('trash')}</button>
+      </div>
     </header>
     <div class="photo-frame"><img src="${pieceUrl(p, 'full')}" alt="${esc(p.title)}"></div>
     <h1 tabindex="-1" class="piece-title">${esc(p.title)}</h1>
     <p class="sub">${fmtDate(p.createdAt, true)}</p>
     ${p.feedback ? `<section class="block" aria-labelledby="pfb-h"><h2 id="pfb-h" class="section-label">Feedback</h2>${feedbackCards(p.feedback)}</section>` : ''}
     <div class="btn-row block">
-      <button type="button" class="btn" data-action="share-piece" data-id="${p.id}">${icon('share')}Share</button>
+      <button type="button" class="btn btn-primary" data-action="send-photo" data-id="${p.id}">${icon('sendOut')}Send photo</button>
+    </div>
+    <div class="btn-row">
+      <button type="button" class="btn" data-action="share-piece" data-id="${p.id}">${icon('share')}Post to Friends</button>
       <button type="button" class="btn btn-primary" data-action="draw-piece" data-id="${p.id}">${icon('brush')}Draw on it</button>
     </div>`);
 }
@@ -254,13 +304,13 @@ async function ideasScreen() {
   const tones = ['sky', 'sun', 'gum'];
   return frag(`
     <header class="screen-head"><div><h1 tabindex="-1">Ideas for you</h1>
-      <p class="sub">${pieces.length ? 'Based on your museum' : 'A few ideas to get you started'}</p></div></header>
+      <p class="sub">Surprise ideas to spark your next drawing</p></div></header>
     <ul class="idea-list" role="list">
       ${ideas.map((idea, i) => {
         const p = idea.pieceId && pieces.find((x) => x.id === idea.pieceId);
         return `<li class="idea tone-${tones[i % 3]}">
           <div class="idea-src">${p ? `<img src="${pieceUrl(p)}" alt="">` : `<span class="idea-src-icon">${icon('bulb')}</span>`}
-            <span>${p ? `Based on ${esc(p.title)}` : 'Starter idea'}</span></div>
+            <span>${p ? `Based on ${esc(p.title)}` : 'Surprise idea'}</span></div>
           <h2 class="idea-title">${esc(idea.title)}</h2>
           <p class="idea-text">${esc(idea.text)}</p>
           <div class="idea-foot"><span class="tag">${idea.kind}</span>
@@ -381,15 +431,25 @@ function settingsScreen() {
         ${THEMES.map((t) => `<label class="choice"><input type="radio" name="theme" value="${t.id}" ${settings.theme === t.id ? 'checked' : ''}>
           <span class="choice-swatch tone-${t.id}" aria-hidden="true"></span><span class="choice-name">${t.name}</span>${icon('check', 'choice-check')}</label>`).join('')}
       </fieldset>
+      <fieldset class="choice-group"><legend>Canvas text and colors</legend>
+        <p class="legend-note">Makes the words and color circles on the drawing screen bigger.</p>
+        ${SIZES.map((z) => `<label class="choice"><input type="radio" name="size" value="${z.id}" ${settings.size === z.id ? 'checked' : ''}>
+          <span class="choice-text"><span class="choice-name">${z.name}</span><span class="choice-example">${esc(z.example)}</span></span>${icon('check', 'choice-check')}</label>`).join('')}
+      </fieldset>
       <fieldset class="choice-group"><legend>Feedback style</legend>
         <p class="legend-note">Changes how new feedback sounds.</p>
         ${VIBES.map((v) => `<label class="choice"><input type="radio" name="vibe" value="${v.id}" ${settings.vibe === v.id ? 'checked' : ''}>
           <span class="choice-text"><span class="choice-name">${v.name}</span><span class="choice-example">${esc(v.example)}</span></span>${icon('check', 'choice-check')}</label>`).join('')}
       </fieldset>
     </form>
+    ${cloudEnabled ? `<section class="block" aria-labelledby="grownups-h">
+      <h2 id="grownups-h" class="section-label">Grown-ups</h2>
+      <p class="body-copy">Set up Friends, add kids, connect with other families, and check reported comments.</p>
+      <a class="btn block-btn block" href="#/parent">${icon('lock')}Open the grown-up area</a>
+    </section>` : ''}
     <section class="block" aria-labelledby="about-h">
       <h2 id="about-h" class="section-label">About your art</h2>
-      <p class="body-copy">Feedback comes from a helper built into this app. It looks at the colors, light, and detail in your picture. Your art stays on this device.</p>
+      <p class="body-copy">Feedback comes from a helper built into this app. It looks at the colors, light, and detail in your picture. ${cloudEnabled ? 'Your museum stays on this device. Only art you share goes to your friends.' : 'Your art stays on this device.'}</p>
     </section>
     <section class="block" aria-labelledby="fresh-h">
       <h2 id="fresh-h" class="section-label">Start fresh</h2>
@@ -406,13 +466,16 @@ const TOOLS = [
   { id: 'pen', label: 'Pen', icon: 'pencil' },
   { id: 'marker', label: 'Marker', icon: 'marker' },
   { id: 'brush', label: 'Paint brush', icon: 'brush' },
+  { id: 'blend', label: 'Blend', icon: 'blend' },
   { id: 'eraser', label: 'Eraser', icon: 'eraser' },
 ];
+// Blend smudges only the drawing, not a photo underneath, so it appears on blank canvases only.
+const toolsFor = (job) => TOOLS.filter((t) => t.id !== 'blend' || !job.blob);
 const PALETTES = [
   { label: 'Rainbow colors', start: 0, colors: [['Red', '#F28B82'], ['Orange', '#F8B26A'], ['Yellow', '#FBD66A'], ['Green', '#8FD19E'], ['Blue', '#85B7EB'], ['Purple', '#B39DDB'], ['Pink', '#F4A6C6']] },
   { label: 'Neutral colors', start: 3, colors: [['White', '#FFFFFF'], ['Light tan', '#E8D5B7'], ['Tan', '#C69C6D'], ['Brown', '#8B5E3C'], ['Dark brown', '#5A3A22'], ['Gray', '#888780'], ['Black', '#1F1F1F']] },
 ];
-const cv = { tool: 'pen', pal: 0, base: 0, color: '#F28B82', sizesOpen: false, size: { pen: 0, marker: 2, brush: 2, eraser: 2 } };
+const cv = { tool: 'pen', pal: 0, base: 0, color: '#F28B82', sizesOpen: false, size: { pen: 0, marker: 2, brush: 2, blend: 1, eraser: 2 }, strength: 1 };
 
 const edge = (hex) => mix(hex, brightness(hex) < 60 ? 0.45 : -0.45);
 function shadesFor(name, hex) {
@@ -428,18 +491,19 @@ function canvasScreen() {
   return frag(`
     <header class="bar">
       <button type="button" class="icon-btn" data-action="leave-canvas" aria-label="Back">${icon('chevronLeft')}</button>
-      <h1 tabindex="-1">${canvasJob.idea ? 'Try your idea' : 'Draw on it'}</h1>
+      <h1 tabindex="-1">${canvasJob.idea ? 'Try your idea' : (canvasJob.blob ? 'Draw on it' : 'Blank canvas')}</h1>
       <span class="bar-spacer"></span>
     </header>
     ${canvasJob.idea ? `<p class="idea-banner">${icon('bulb')}<span>${esc(canvasJob.idea)}</span></p>` : ''}
     <div class="stage-wrap"><div class="stage" id="stage"></div></div>
     <div class="tool-row">
       <div class="tools" role="group" aria-label="Drawing tools">
-        ${TOOLS.map((t) => `<button type="button" class="tool" data-tool="${t.id}" data-fk="tool-${t.id}" aria-pressed="false" aria-label="${t.label}">${icon(t.icon)}</button>`).join('')}
+        ${toolsFor(canvasJob).map((t) => `<button type="button" class="tool" data-tool="${t.id}" data-fk="tool-${t.id}" aria-pressed="false" aria-label="${t.label}">${icon(t.icon)}</button>`).join('')}
       </div>
       <button type="button" class="tool tool-undo" data-action="undo" aria-label="Undo">${icon('undo')}</button>
     </div>
     <div class="size-row"><div id="sizes" class="sizes"></div><span class="preview-wrap" aria-hidden="true"><span id="preview" class="preview"></span></span></div>
+    <div class="strength-row" id="strengths" hidden></div>
     <div class="color-row" id="color-row">
       <div id="swatches" class="swatches" role="group"></div>
       <button type="button" id="palette-arrow" class="arrow-btn" data-action="switch-palette" data-fk="arrow"></button>
@@ -453,6 +517,7 @@ function canvasScreen() {
 
 async function setupCanvas() {
   const stage = document.getElementById('stage');
+  if (cv.tool === 'blend' && canvasJob.blob) cv.tool = 'pen';
   drawing = new Drawing(stage);
   drawing.ink.setAttribute('role', 'img');
   drawing.ink.setAttribute('aria-label', canvasJob.blob ? 'Drawing area on top of your picture. Draw with your finger or Apple Pencil.' : 'Blank drawing area. Draw with your finger or Apple Pencil.');
@@ -500,8 +565,12 @@ function renderControls() {
   if (cv.sizesOpen) {
     sizes.setAttribute('role', 'group');
     sizes.setAttribute('aria-label', `${tool.label} size`);
-    sizes.innerHTML = SIZE_STEPS.map((s, i) => `<button type="button" class="size-btn" data-action="pick-size" data-i="${i}" data-fk="size-${i}" aria-pressed="${cv.size[cv.tool] === i}">
-      <span class="size-dot" style="width:${Math.min(s.px, 22)}px;height:${Math.min(s.px, 22)}px"></span><span class="sr-only">${s.label}</span></button>`).join('');
+    const blend = cv.tool === 'blend';
+    sizes.innerHTML = (blend ? BLEND_SIZES : SIZE_STEPS).map((s, i) => {
+      const dot = blend ? Math.min(26, Math.round(s.px * 0.38)) : Math.min(s.px, 22);
+      return `<button type="button" class="size-btn" data-action="pick-size" data-i="${i}" data-fk="size-${i}" aria-pressed="${cv.size[cv.tool] === i}">
+      <span class="size-dot" style="width:${dot}px;height:${dot}px"></span><span class="sr-only">${s.label}</span></button>`;
+    }).join('');
   } else {
     sizes.removeAttribute('role');
     sizes.removeAttribute('aria-label');
@@ -523,12 +592,21 @@ function renderControls() {
   shades.setAttribute('aria-label', `Shades of ${baseName.toLowerCase()}`);
   shades.innerHTML = shadesFor(baseName, baseHex).map(([name, hex], i) => `<button type="button" class="shade" data-action="pick-shade" data-hex="${hex}" data-fk="sh-${i}" aria-pressed="${cv.color === hex}" aria-label="${name}" style="--c:${hex};--edge:${edge(hex)}"></button>`).join('');
 
-  const px = SIZE_STEPS[cv.size[cv.tool]].px;
+  const blendTool = cv.tool === 'blend';
+  const strengths = main.querySelector('#strengths');
+  strengths.hidden = !blendTool;
+  if (blendTool) {
+    strengths.innerHTML = `<span class="strength-label" aria-hidden="true">Strength</span>
+      <div class="strength-btns" role="group" aria-label="Blend strength">${BLEND_STRENGTHS.map((s, i) => `<button type="button" class="strength-btn" data-action="pick-strength" data-i="${i}" data-fk="strength-${i}" aria-pressed="${cv.strength === i}">${s.label}</button>`).join('')}</div>`;
+  } else strengths.innerHTML = '';
+
+  const px = (blendTool ? BLEND_SIZES : SIZE_STEPS)[cv.size[cv.tool]].px;
   const preview = main.querySelector('#preview');
-  preview.style.width = preview.style.height = `${Math.min(px, 30)}px`;
+  preview.style.width = preview.style.height = `${blendTool ? Math.min(Math.round(px * 0.5), 34) : Math.min(px, 30)}px`;
   preview.classList.toggle('is-eraser', cv.tool === 'eraser');
-  preview.style.background = cv.tool === 'eraser' ? '' : cv.color;
-  drawing.setTool(cv.tool, px, cv.color);
+  preview.classList.toggle('is-blend', blendTool);
+  preview.style.background = cv.tool === 'eraser' || blendTool ? '' : cv.color;
+  drawing.setTool(cv.tool, px, cv.color, BLEND_STRENGTHS[cv.strength].amount);
 
   if (focusKey) { const el = main.querySelector(`[data-fk="${focusKey}"]`); if (el) el.focus(); }
 }
@@ -597,16 +675,16 @@ const actions = {
     canvasJob = { blob: p.image, title: p.title, idea: null, back: `#/piece/${p.id}` };
     go('#/canvas');
   },
-  'try-idea': async (el) => {
-    const p = el.dataset.piece ? await db.getPiece(el.dataset.piece) : null;
-    canvasJob = { blob: p ? p.image : null, title: p ? p.title : 'My drawing', idea: el.dataset.idea, back: '#/ideas' };
+  'try-idea': (el) => {
+    // Every idea starts on a completely blank canvas, even one based on a museum piece.
+    canvasJob = { blob: null, title: 'My drawing', idea: el.dataset.idea, back: '#/ideas' };
     go('#/canvas');
   },
   'new-ideas': () => { ideaSeed += 1; router({ focus: '[data-fk="new-ideas"]' }).then(() => say('New ideas are ready')); },
   'delete-piece': async (el) => {
     const p = await db.getPiece(el.dataset.id);
     if (!p) return;
-    const r = await ask({ title: `Delete “${p.title}”?`, body: 'It will be removed from your museum and your friends feed.', ok: 'Delete', danger: true });
+    const r = await ask({ title: `Delete “${p.title}”?`, body: cloudEnabled ? 'It will be removed from your museum. If you shared it, a grown-up can remove it from Friends.' : 'It will be removed from your museum and your friends feed.', ok: 'Delete', danger: true });
     if (!r.ok) return;
     await db.deletePiece(p.id);
     const posts = await db.kvGet('posts', []);
@@ -614,6 +692,30 @@ const actions = {
     forgetUrls(p.id);
     say('Deleted from your museum');
     go('#/museum');
+  },
+  'toggle-favorite': async (el) => {
+    const p = await db.getPiece(el.dataset.id);
+    if (!p) return;
+    p.favorite = !p.favorite;
+    await db.addPiece(p);
+    el.setAttribute('aria-pressed', String(p.favorite));
+    say(p.favorite ? 'Added to your favorites' : 'Removed from your favorites');
+  },
+  // Opens the iPhone share sheet with the picture, so it can be sent in Messages or any other app.
+  'send-photo': async (el) => {
+    const file = shareFiles.get(el.dataset.id);
+    if (!file) return;
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: file.name.replace(/\.\w+$/, '') }); }
+      catch (e) { if (!e || e.name !== 'AbortError') say('Sharing didn’t work. Try again.'); }
+      return;
+    }
+    // No share sheet here (for example on a computer): save the picture instead.
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(file); a.download = file.name;
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    say('Sharing isn’t available here, so the photo was saved to this device');
   },
   'share-piece': (el) => sharePiece(el.dataset.id),
   share: async () => {
@@ -680,10 +782,15 @@ const actions = {
     if (drawing && drawing.dirty) {
       const r = await ask({ title: 'Leave without saving?', body: 'Your drawing will be lost.', ok: 'Leave', cancel: 'Keep drawing', danger: true });
       if (!r.ok) return;
+      drawing.dirty = false;
     }
     const back = (canvasJob && canvasJob.back) || '#/home';
     canvasJob = null;
     go(back);
+  },
+  'blank-canvas': () => {
+    canvasJob = { blob: null, title: 'My drawing', idea: null, back: lastScreenHash };
+    go('#/canvas');
   },
   undo: () => { if (drawing && !drawing.undo()) say('Nothing to undo'); },
   'start-over': async () => {
@@ -713,6 +820,7 @@ const actions = {
     renderControls();
     if (toolButton) toolButton.focus();
   },
+  'pick-strength': (el) => { cv.strength = Number(el.dataset.i); renderControls(); },
   'pick-color': (el) => {
     cv.base = Number(el.dataset.i);
     cv.color = PALETTES[cv.pal].colors[cv.base][1];
@@ -759,11 +867,20 @@ const forms = {
   },
 };
 
+const cloudFriends = cloudEnabled ? createCloudFriends({
+  esc, frag, say, ask, go, router: (opts) => router(opts), icon, db, pieceUrl, shrink,
+  checkComment, QUICK_COMMENTS, MAX_COMMENT, backBar, fmtAgo, main,
+}) : null;
+if (cloudFriends) {
+  Object.assign(actions, cloudFriends.actions);
+  Object.assign(forms, cloudFriends.forms);
+}
+
 main.addEventListener('click', (e) => {
   const el = e.target.closest('[data-action]');
   if (!el || !main.contains(el)) return;
   const fn = actions[el.dataset.action];
-  if (fn) { e.preventDefault(); fn(el, e); }
+  if (fn) { e.preventDefault(); if (el.dataset.busy) return; fn(el, e); }
 });
 main.addEventListener('submit', (e) => {
   const form = e.target.closest('form[data-form]');
@@ -787,19 +904,31 @@ main.addEventListener('change', (e) => {
     settings.theme = e.target.value; saveSettings(); applyTheme();
     say(`Color scheme: ${THEMES.find((t) => t.id === settings.theme).name}`);
   }
+  if (e.target.name === 'size') {
+    settings.size = e.target.value; saveSettings(); applyTheme();
+    say(`Canvas text and colors: ${SIZES.find((z) => z.id === settings.size).name}`);
+  }
   if (e.target.name === 'vibe') {
     settings.vibe = e.target.value; saveSettings();
     say(`Feedback style: ${VIBES.find((v) => v.id === settings.vibe).name}`);
   }
 });
 
+document.querySelector('.tabbar').addEventListener('click', (e) => {
+  const el = e.target.closest('[data-action]');
+  if (!el || !actions[el.dataset.action]) return;
+  e.preventDefault();
+  actions[el.dataset.action](el, e);
+});
+
 /* ---------- Router ---------- */
 const ROUTES = {
-  home: homeScreen, review: reviewScreen, museum: museumScreen, piece: pieceScreen,
+  home: homeScreen, snap: snapScreen, review: reviewScreen, museum: museumScreen, piece: pieceScreen,
   ideas: ideasScreen, friends: friendsScreen, post: postScreen, settings: settingsScreen, canvas: canvasScreen,
 };
-const TAB_FOR = { home: 'home', review: 'home', settings: 'home', museum: 'museum', piece: 'museum', ideas: 'ideas', friends: 'friends', post: 'friends' };
-const HIDE_TABS = new Set(['canvas', 'review', 'post', 'settings']);
+if (cloudFriends) Object.assign(ROUTES, cloudFriends.routes);
+const TAB_FOR = { home: 'home', snap: 'snap', review: 'snap', settings: 'home', museum: 'museum', piece: 'museum', ideas: 'ideas', friends: 'friends', post: 'friends', parent: 'friends', owner: 'friends' };
+const HIDE_TABS = new Set(['canvas', 'review', 'post', 'settings', 'parent', 'owner']);
 let renderCount = 0;
 let firstRender = true;
 
@@ -816,6 +945,7 @@ async function router(opts = {}) {
   if (id !== renderCount) return;
   if (drawing) { drawing.destroy(); drawing = null; }
   main.replaceChildren(content);
+  if (name !== 'canvas') lastScreenHash = location.hash || '#/home';
   document.body.dataset.screen = name;
   document.body.dataset.tabs = HIDE_TABS.has(name) ? 'off' : 'on';
   document.querySelectorAll('[data-tab]').forEach((a) => {
@@ -824,6 +954,7 @@ async function router(opts = {}) {
   const h1 = main.querySelector('h1');
   document.title = h1 ? `${h1.textContent} – ${APP_NAME}` : APP_NAME;
   if (name === 'canvas') await setupCanvas();
+  if (cloudFriends && cloudFriends.afterRender) await cloudFriends.afterRender(name);
   if (opts.focus) {
     const el = main.querySelector(opts.focus);
     if (el) el.focus();
@@ -834,7 +965,26 @@ async function router(opts = {}) {
   firstRender = false;
 }
 
-window.addEventListener('hashchange', () => router());
+// Swiping back (or the browser's back button) leaves the drawing screen too.
+// If there's unsaved drawing, put the canvas back and ask first, so art is never lost by accident.
+let restoringCanvas = false;
+const routeNameNow = () => { const n = location.hash.replace(/^#\/?/, '').split('/')[0]; return ROUTES[n] ? n : 'home'; };
+window.addEventListener('hashchange', async () => {
+  if (restoringCanvas) { restoringCanvas = false; return; }
+  if (drawing && drawing.dirty && routeNameNow() !== 'canvas') {
+    restoringCanvas = true;
+    location.hash = '#/canvas';
+    const r = await ask({ title: 'Leave without saving?', body: 'Your drawing will be lost.', ok: 'Leave', cancel: 'Keep drawing', danger: true });
+    if (r.ok && drawing) {
+      const back = (canvasJob && canvasJob.back) || '#/home';
+      drawing.dirty = false;
+      canvasJob = null;
+      if (history.length > 2) history.back(); else go(back);
+    }
+    return;
+  }
+  router();
+});
 window.addEventListener('beforeunload', (e) => { if (drawing && drawing.dirty) { e.preventDefault(); e.returnValue = ''; } });
 document.querySelectorAll('[data-icon]').forEach((el) => { el.innerHTML = icon(el.dataset.icon); });
 router();

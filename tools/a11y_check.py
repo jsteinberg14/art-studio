@@ -175,7 +175,7 @@ CHECK_JS = r"""
     if (r < 3) add('non-text-contrast', '1.4.11', el, `Border is ${r.toFixed(2)}:1 against its background (needs 3:1)`);
   });
   // 1.4.1 selected states shown without color alone: check state attributes exist
-  document.querySelectorAll('.tool[data-tool], .swatch, .shade, .size-btn, .react[data-action]').forEach((el) => {
+  document.querySelectorAll('.tool[data-tool], .swatch, .shade, .size-btn, .strength-btn, .fav-btn, .react[data-action]').forEach((el) => {
     if (!el.hasAttribute('aria-pressed')) add('state-exposed', '4.1.2', el, 'Toggle does not expose aria-pressed');
   });
   if (!document.querySelector('.tab[aria-current="page"]') && document.body.dataset.tabs === 'on') add('current-tab', '4.1.2', null, 'No tab is marked as the current page');
@@ -232,13 +232,24 @@ def main():
         pg.goto(BASE + '#/museum'); pg.wait_for_selector('h1'); time.sleep(0.2)
         run_checks(pg, 'Museum (empty)', results)
         pg.goto(BASE + '#/ideas'); pg.wait_for_selector('.idea'); run_checks(pg, 'Ideas (starter)', results)
-        pg.goto(BASE + '#/home'); pg.wait_for_selector('.snap-card')
+        pg.goto(BASE + '#/snap'); pg.wait_for_selector('.snap-card'); run_checks(pg, 'Snap page (empty)', results)
+        pg.goto(BASE + '#/canvas'); pg.wait_for_selector('#stage canvas'); time.sleep(0.3)
+        pg.click('[data-tool="blend"]'); time.sleep(0.1)
+        run_checks(pg, 'Blank canvas (blend tool and strength)', results, 30)
+        pg.click('[data-tool="blend"]'); time.sleep(0.1)  # second tap opens the blend sizes
+        run_checks(pg, 'Blank canvas (blend sizes open)', results, 30)
+        pg.goto(BASE + '#/home'); pg.wait_for_selector('.link-tile')
         pg.set_input_files('#snap-input', TEST_IMAGE); pg.wait_for_selector('.fb')
         run_checks(pg, 'Review photo', results)
         pg.click('button[type=submit]'); pg.wait_for_selector('.gallery'); time.sleep(0.2)
         run_checks(pg, 'Museum', results)
-        pg.goto(BASE + '#/home'); pg.wait_for_selector('.thumb-row'); time.sleep(0.2); run_checks(pg, 'Home', results)
+        pg.goto(BASE + '#/snap'); pg.wait_for_selector('.thumb-row'); time.sleep(0.2); run_checks(pg, 'Snap page', results)
         pg.click('.thumb-link'); pg.wait_for_selector('.piece-title'); time.sleep(0.2); run_checks(pg, 'Piece', results)
+        pg.click('[data-action="toggle-favorite"]'); time.sleep(0.2)
+        run_checks(pg, 'Piece (favorited)', results)
+        pg.goto(BASE + '#/home'); pg.wait_for_selector('.fav-row'); time.sleep(0.2); run_checks(pg, 'Home (with favorites)', results)
+        pg.goto(BASE + '#/museum'); pg.wait_for_selector('.fav-badge'); time.sleep(0.2); run_checks(pg, 'Museum (favorite heart)', results)
+        pg.click('.art-tile'); pg.wait_for_selector('.piece-title'); time.sleep(0.2)
         pg.click('[data-action="draw-piece"]'); pg.wait_for_selector('#stage canvas'); time.sleep(0.3)
         run_checks(pg, 'Canvas (rainbow)', results, 30)
         pg.click('[data-tool="pen"]'); time.sleep(0.1)  # second tap on selected tool opens sizes
@@ -272,12 +283,41 @@ def main():
         pg.click('.feed a.react >> nth=0'); pg.wait_for_selector('.switch'); time.sleep(0.2)
         run_checks(pg, 'Comments (own post)', results, 30)
         pg.goto(BASE + '#/settings'); pg.wait_for_selector('.choice'); run_checks(pg, 'Settings', results, 20)
+        pg.check('input[name="size"][value="big"]'); time.sleep(0.2)
+        run_checks(pg, 'Settings (bigger canvas option on)', results, 20)
+        pg.goto(BASE + '#/canvas'); pg.wait_for_selector('#stage canvas'); time.sleep(0.3)
+        pg.click('[data-tool="blend"]'); time.sleep(0.1)
+        run_checks(pg, 'Canvas (bigger text and colors, blend)', results, 30)
+        pg.click('#palette-arrow'); time.sleep(0.3)
+        run_checks(pg, 'Canvas (bigger, neutral colors)', results, 30)
         pg.goto(BASE + '#/ideas'); pg.wait_for_selector('.idea'); run_checks(pg, 'Ideas', results)
+        # An idea opens a completely blank canvas, with the Blend tool available
+        pg.goto(BASE + '#/ideas'); pg.wait_for_selector('.idea'); pg.click('.idea-go >> nth=0'); pg.wait_for_selector('#stage canvas'); time.sleep(0.3)
+        run_checks(pg, 'Canvas (from an idea)', results, 30)
+        tools_here = pg.eval_on_selector_all('.tool[data-tool]', 'els => els.map(e => e.dataset.tool)')
+        label = pg.get_attribute('.stage-ink', 'aria-label') or ''
+        if 'blend' not in tools_here or not label.startswith('Blank drawing area'):
+            results['Canvas (from an idea)']['issues'].append({'rule': 'idea-blank-canvas', 'sc': 'request', 'el': '#stage', 'msg': f'Idea canvas is not blank (tools: {tools_here}, label: {label})'})
+        # Black and white style: screens stay readable and the color swatches keep their colors
+        pg.goto(BASE + '#/settings'); pg.wait_for_selector('.choice')
+        pg.check('input[name="size"][value="normal"]')
+        pg.check('input[name="theme"][value="bw"]'); time.sleep(0.2)
+        run_checks(pg, 'Settings (black and white)', results, 20)
+        for route, sel, label in [('#/home', '.link-tile', 'Home (black and white)'), ('#/ideas', '.idea', 'Ideas (black and white)'), ('#/friends', '.feed', 'Friends (black and white)')]:
+            pg.goto(BASE + route); pg.wait_for_selector(sel); time.sleep(0.2); run_checks(pg, label, results, 30)
+        pg.goto(BASE + '#/canvas'); pg.wait_for_selector('#stage canvas'); time.sleep(0.3)
+        pg.click('[data-tool="blend"]'); time.sleep(0.1)
+        run_checks(pg, 'Canvas (black and white style)', results, 30)
+        dots = pg.evaluate("() => [...document.querySelectorAll('.swatch')].map((b) => getComputedStyle(b.querySelector('.swatch-dot')).backgroundColor)")
+        want = ['rgb(242, 139, 130)', 'rgb(248, 178, 106)', 'rgb(251, 214, 106)', 'rgb(143, 209, 158)', 'rgb(133, 183, 235)', 'rgb(179, 157, 219)', 'rgb(244, 166, 198)']
+        if dots != want:
+            results['Canvas (black and white style)']['issues'].append({'rule': 'swatch-colors', 'sc': 'request', 'el': '.swatch', 'msg': f'Swatch colors changed in black and white style: {dots}'})
+        pg.goto(BASE + '#/settings'); pg.wait_for_selector('.choice'); pg.check('input[name="theme"][value="sky"]'); time.sleep(0.1)
 
         # 1.4.10 reflow at 320 CSS px and 1.4.4 text at 200%
         small = browser.new_context(viewport={'width': 320, 'height': 640})
         sp = small.new_page()
-        for route in ['#/home', '#/museum', '#/ideas', '#/friends', '#/post/sample-1', '#/settings', '#/canvas']:
+        for route in ['#/home', '#/snap', '#/museum', '#/ideas', '#/friends', '#/post/sample-1', '#/settings', '#/canvas']:
             sp.goto(BASE + route); sp.wait_for_selector('h1'); time.sleep(0.3)
             w = sp.evaluate("() => document.documentElement.scrollWidth")
             key = f'Reflow 320px {route}'
@@ -286,6 +326,15 @@ def main():
             w2 = sp.evaluate("() => document.documentElement.scrollWidth")
             key2 = f'Text 200% at 320px {route}'
             results[key2] = {'issues': [] if w2 <= 321 else [{'rule': 'resize-text', 'sc': '1.4.4', 'el': route, 'msg': f'Content overflows sideways with 200% text ({w2}px)'}], 'tab_stops': 0}
+        # Blend tool and strength row at 320 px, also with 200% text
+        sp.goto(BASE + '#/canvas'); sp.reload(); sp.wait_for_selector('#stage canvas'); time.sleep(0.3)  # reload clears the 200% text from the loop above
+        sp.click('[data-tool="blend"]'); sp.click('[data-tool="blend"]'); time.sleep(0.2)
+        sp.evaluate("() => { document.documentElement.dataset.size = 'big'; }"); time.sleep(0.2)
+        wb = sp.evaluate("() => document.documentElement.scrollWidth")
+        results['Reflow 320px blend tool'] = {'issues': [] if wb <= 321 else [{'rule': 'reflow', 'sc': '1.4.10', 'el': 'blend', 'msg': f'Scrolls sideways at 320px ({wb}px)'}], 'tab_stops': 0}
+        sp.evaluate("() => { document.documentElement.style.fontSize = '200%'; }"); time.sleep(0.2)
+        wb2 = sp.evaluate("() => document.documentElement.scrollWidth")
+        results['Text 200% at 320px blend tool'] = {'issues': [] if wb2 <= 321 else [{'rule': 'resize-text', 'sc': '1.4.4', 'el': 'blend', 'msg': f'Content overflows sideways with 200% text ({wb2}px)'}], 'tab_stops': 0}
         # 1.4.12 text spacing
         sp.goto(BASE + '#/home'); sp.wait_for_selector('h1')
         sp.add_style_tag(content='* { line-height: 1.5 !important; letter-spacing: 0.12em !important; word-spacing: 0.16em !important; } p { margin-bottom: 2em !important; }')

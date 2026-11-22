@@ -81,19 +81,24 @@ const GOOD = [
 ];
 const GOOD_FALLBACK = { bubbly: 'You finished a whole piece. That takes real focus!', clear: 'You finished a whole piece. That takes focus.' };
 
+// "Try this next" tips are about the drawing itself: things to add, not colors or backgrounds.
 const TRY = [
-  { test: (s) => s.range < 0.45, score: (s) => 0.95 - s.range,
-    bubbly: 'Try adding some dark shadows to make parts pop out!', clear: 'Try adding darker shadows so parts stand out.' },
   { test: (s) => s.whiteRatio > 0.45, score: (s) => s.whiteRatio,
-    bubbly: 'Try filling in the background with a fun color!', clear: 'Try filling in more of the background.' },
-  { test: (s) => s.hueCount <= 1, score: () => 0.6,
-    bubbly: 'Try adding one surprise color somewhere!', clear: 'Try adding one surprise color.' },
+    bubbly: 'Try adding more to your picture, like a friend, a pet, or something your character is holding!', clear: 'Try adding more things to your picture, like a friend or something to hold.' },
+  { test: (s) => s.range < 0.45, score: (s) => 0.95 - s.range,
+    bubbly: 'Try adding a shadow under something so it looks like it is really sitting there!', clear: 'Try adding a shadow under something so it looks like it sits on the ground.' },
   { test: (s) => s.detail < 0.035, score: () => 0.55,
-    bubbly: 'Try adding tiny details like dots, stripes, or patterns!', clear: 'Try adding small details like patterns or texture.' },
+    bubbly: 'Try adding tiny details like buttons, whiskers, stripes, or leaves!', clear: 'Try adding small details like buttons, whiskers, stripes, or leaves.' },
+  { test: (s) => s.whiteRatio > 0.25 && s.whiteRatio <= 0.45, score: () => 0.5,
+    bubbly: 'Try drawing something in front, like a flower or a rock, so your picture feels deep!', clear: 'Try drawing something in front, like a flower or a rock, to add depth.' },
+  { test: (s) => s.hueCount <= 1, score: () => 0.45,
+    bubbly: 'Try adding a tiny surprise, like a butterfly, a bug, or a little star!', clear: 'Try adding a small surprise, like a butterfly or a bug.' },
   { test: (s) => s.hueCount >= 6, score: () => 0.5,
-    bubbly: 'Try picking one color to be the star of the show!', clear: 'Try choosing one main color to lead the piece.' },
+    bubbly: 'Try making one thing in your picture extra big so it is the star of the show!', clear: 'Try making one thing bigger so it is the first thing people see.' },
+  { test: (s) => s.detail > 0.1, score: () => 0.4,
+    bubbly: 'Try adding a face or little eyes to something, so it comes to life!', clear: 'Try adding a face or eyes to something so it feels alive.' },
 ];
-const TRY_FALLBACK = { bubbly: 'Try adding a shadow under something to make it look 3D!', clear: 'Try adding a shadow under something to make it look 3D.' };
+const TRY_FALLBACK = { bubbly: 'Try adding a face or little eyes to something, so it comes to life!', clear: 'Try adding a face or eyes to something so it feels alive.' };
 
 function best(rules, stats, fallback, vibe) {
   const hits = rules.filter((r) => r.test(stats)).sort((a, b) => b.score(stats) - a.score(stats));

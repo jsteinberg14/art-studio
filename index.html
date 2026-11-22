@@ -16,7 +16,7 @@
   <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png">
   <link rel="stylesheet" href="./css/styles.css">
   <script>
-    try { var s = JSON.parse(localStorage.getItem('art-studio-settings') || '{}'); if (s.theme) document.documentElement.dataset.theme = s.theme; } catch (e) {}
+    try { var s = JSON.parse(localStorage.getItem('art-studio-settings') || '{}'); if (s.theme) document.documentElement.dataset.theme = s.theme; if (s.size) document.documentElement.dataset.size = s.size; } catch (e) {}
   </script>
 </head>
 <body data-screen="home" data-tabs="on">
@@ -24,8 +24,10 @@
 
   <nav class="tabbar" aria-label="Main">
     <ul>
-      <li><a class="tab" href="#/home" data-tab="home"><span class="tab-icon" data-icon="camera"></span><span>Snap</span></a></li>
+      <li><a class="tab" href="#/home" data-tab="home"><span class="tab-icon" data-icon="home"></span><span>Home</span></a></li>
+      <li><a class="tab" href="#/snap" data-tab="snap"><span class="tab-icon" data-icon="camera"></span><span>Snap</span></a></li>
       <li><a class="tab" href="#/museum" data-tab="museum"><span class="tab-icon" data-icon="photo"></span><span>Museum</span></a></li>
+      <li><a class="tab tab-blank" href="#/canvas" data-action="blank-canvas" aria-label="Blank canvas"><span class="tab-icon" data-icon="blank"></span><span>Blank</span></a></li>
       <li><a class="tab" href="#/ideas" data-tab="ideas"><span class="tab-icon" data-icon="bulb"></span><span>Ideas</span></a></li>
       <li><a class="tab" href="#/friends" data-tab="friends"><span class="tab-icon" data-icon="users"></span><span>Friends</span></a></li>
     </ul>

@@ -2,7 +2,10 @@
 
 **Target:** WCAG 2.2 Level AA. The ADA itself has no certification or checklist. The U.S. Department of Justice and courts point to WCAG 2.1 Level AA, and WCAG 2.2 AA includes everything in 2.1 AA.
 
-**Automated result:** 0 failures across 33 screen states, tested November 20, 2026 in headless Chromium at iPhone size (390 × 844), small-phone size (320 × 640), with 200% text, extra text spacing, and reduced motion. The test script is `tools/a11y_check.py`.
+**Automated result:** 0 failures across 68 screen states, tested November 22, 2026 in headless Chromium at iPhone size (390 × 844), small-phone size (320 × 640), with 200% text, extra text spacing, and reduced motion.
+
+- `tools/a11y_check.py` covers 52 states of the main app, including the Blend tool, the bigger canvas text and colors option, the black and white style, the new Home links, favorites, and an idea's blank canvas.
+- `tools/friends_check.py` covers 16 states of the real Friends tab, the grown-up area, owner tools, the privacy notice, and the permission form. It runs against a stand-in server and walks through 27 steps, from signing in to deleting a family.
 
 **Status:** The automated checks pass. The hands-on checks below still need a person with an iPhone or iPad before you can call the app fully conformant.
 
@@ -30,15 +33,15 @@
 | 2.5.7 Dragging movements | Only drawing needs dragging, which is essential to drawing. Everything else is a single tap. | Pass (see exception) |
 | 2.5.8 Target size | Every target is at least 24 × 24 px. Almost all are 44 × 44 px or larger, which matches Apple's guidance. Color swatches are 42 × 44 px on an iPhone and larger on an iPad. | Pass |
 | 3.1.1 Language of page | Set to English. | Pass |
-| 3.2.3 Consistent navigation | The same four tabs appear in the same order on every main screen. | Pass |
-| 3.3.1 Error identification | A blocked comment shows a message that says what happened and what to try, and the field is marked invalid. | Pass |
+| 3.2.3 Consistent navigation | The same six tabs (Home, Snap, Museum, Blank, Ideas, Friends) appear in the same order on every main screen. | Pass |
+| 3.3.1 Error identification | A blocked comment, wrong sign-in code, wrong PIN, or bad invite code shows a message next to the field that says what happened and what to try. | Pass |
 | 3.3.2 Labels or instructions | Every field has a visible label. | Pass |
 | 4.1.2 Name, role, value | Every control has a name. Toggles report on or off, the comments switch is a switch, and the current tab is marked. | Pass |
 | 4.1.3 Status messages | Messages like "Saved to your museum" are announced without moving focus. Blocked-comment messages are announced right away. | Pass |
 
 ## Exceptions
 
-**Freehand drawing needs a finger, Apple Pencil, or mouse.** Drawing follows the path of your hand, which WCAG treats as an essential exception for keyboard-only use (2.1.1) and dragging (2.5.7). Every control around the canvas still works with a keyboard, VoiceOver, and Switch Control.
+**Freehand drawing and blending need a finger, Apple Pencil, or mouse.** Drawing and smudging follow the path of your hand, which WCAG treats as an essential exception for keyboard-only use (2.1.1) and dragging (2.5.7). Every control around the canvas still works with a keyboard, VoiceOver, and Switch Control.
 
 ## Checks to do by hand
 
