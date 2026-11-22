@@ -180,28 +180,43 @@ const avatar = (person, cls = '') => `<span class="avatar tone-${person.tone} ${
 async function homeScreen() {
   const pieces = await db.allPieces();
   const favorites = pieces.filter((p) => p.favorite);
+  const spark = (cls) => `<svg class="spark ${cls}" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 0C13 7 17 11 24 12C17 13 13 17 12 24C11 17 7 13 0 12C7 11 11 7 12 0Z"/></svg>`;
+  const tile = (href, tone, name, sub, ic, extra = '') => `<li${extra ? ` class="${extra}"` : ''}><a class="link-tile tile-${tone}" href="${href}"><span class="tile-disc">${icon(ic)}</span><span class="tile-text"><span class="tile-name">${name}</span><span class="tile-sub">${sub}</span></span></a></li>`;
   return frag(`
-    <header class="screen-head">
-      <div><p class="kicker">Welcome back</p><h1 tabindex="-1">Your studio</h1></div>
+    <div class="home">
+    <header class="home-head">
+      ${spark('spark-a')}${spark('spark-b')}
+      <h1 tabindex="-1">What will you make today?</h1>
+      <svg class="ribbon" viewBox="0 0 320 18" aria-hidden="true" focusable="false">
+        <defs><linearGradient id="ribbon-paint" x1="0" x2="1" y1="0" y2="0">
+          ${['coral', 'orange', 'butter', 'mint', 'sky', 'grape', 'pink'].map((c, i) => `<stop offset="${(i / 7 * 100).toFixed(2)}%" style="stop-color:var(--pop-${c})"/><stop offset="${((i + 1) / 7 * 100).toFixed(2)}%" style="stop-color:var(--pop-${c})"/>`).join('')}
+        </linearGradient></defs>
+        <path d="M6 9C32 -1 52 19 80 9S128 -1 160 9S208 19 240 9S288 -1 314 9" fill="none" stroke="var(--ink)" stroke-width="12" stroke-linecap="round"/>
+        <path class="ribbon-paint" d="M6 9C32 -1 52 19 80 9S128 -1 160 9S208 19 240 9S288 -1 314 9" fill="none" stroke="url(#ribbon-paint)" stroke-width="7" stroke-linecap="round"/>
+      </svg>
     </header>
     <nav aria-label="Everything in your studio">
       <ul class="link-grid" role="list">
-        <li><a class="link-tile link-tile-snap" href="#/snap">${icon('camera')}<span>Snap your art</span></a></li>
-        <li><a class="link-tile" href="#/museum">${icon('photo')}<span>Museum</span></a></li>
-        <li><a class="link-tile" href="#/canvas" data-action="blank-canvas">${icon('blank')}<span>Blank canvas</span></a></li>
-        <li><a class="link-tile" href="#/ideas">${icon('bulb')}<span>Ideas</span></a></li>
-        <li><a class="link-tile" href="#/friends">${icon('users')}<span>Friends</span></a></li>
-        <li><a class="link-tile" href="#/settings">${icon('settings')}<span>Settings</span></a></li>
-        ${cloudEnabled ? `<li><a class="link-tile" href="#/parent">${icon('lock')}<span>Grown-ups</span></a></li>` : ''}
+        <li class="tile-wide"><a class="link-tile link-tile-snap tile-coral" href="#/snap">
+          ${spark('spark-c')}${spark('spark-d')}
+          <span class="tile-disc tile-disc-big">${icon('camera')}</span>
+          <span class="tile-text"><span class="tile-name">Snap your art</span><span class="tile-sub">Take a photo and get ideas</span></span></a></li>
+        ${tile('#/canvas" data-action="blank-canvas', 'butter', 'Blank canvas', 'Draw anything', 'blank')}
+        ${tile('#/ideas', 'mint', 'Ideas', 'Surprise me', 'bulb')}
+        ${tile('#/museum', 'sky', 'Museum', 'All your art', 'photo')}
+        ${tile('#/friends', 'grape', 'Friends', 'Share and see', 'users')}
+        ${tile('#/settings', 'pink', 'Settings', 'Make it yours', 'settings', 'tile-slim')}
+        ${cloudEnabled ? tile('#/parent', 'orange', 'Grown-ups', 'For parents', 'lock', 'tile-slim') : ''}
       </ul>
     </nav>
     <section class="block" aria-labelledby="fav-h">
-      <div class="section-row"><h2 id="fav-h" class="section-label">Your favorites</h2>
+      <div class="section-row"><h2 id="fav-h" class="section-label">${icon('heart')}Your favorites</h2>
         ${favorites.length > 6 ? '<a href="#/museum" class="text-link" aria-label="See all your art in the museum">See all</a>' : ''}</div>
       ${favorites.length
         ? `<ul class="thumb-row fav-row" role="list">${favorites.slice(0, 6).map((p) => `<li><a href="#/piece/${p.id}" class="thumb-link"><img src="${pieceUrl(p)}" alt="${esc(p.title)}"></a></li>`).join('')}</ul>`
-        : `<p class="empty-note">Tap the heart on a piece in your museum and it shows up here.</p>`}
-    </section>`);
+        : `<p class="empty-note empty-fav">Tap the heart on a piece in your museum and it shows up here.</p>`}
+    </section>
+    </div>`);
 }
 
 async function snapScreen() {
