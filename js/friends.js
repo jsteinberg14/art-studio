@@ -118,7 +118,7 @@ export function createCloudFriends(ctx) {
     return `<li><article class="post" aria-labelledby="post-${p.id}">
       <div class="post-head">${avatarFor(p.child, 'avatar-sm')}
         <div><p class="post-name" id="post-${p.id}">${esc(name)}</p><p class="post-time">${esc(fmtAgo(new Date(p.created_at).getTime()))}</p></div></div>
-      <div class="post-art"><img src="${esc(p.url)}" alt="Art by ${esc(name)}: ${esc(p.title)}"></div>
+      <div class="post-art"><button type="button" class="zoomable" data-action="zoom-image" data-src="${esc(p.url)}" data-alt="${esc(`Art by ${name}: ${p.title}`)}" aria-label="Zoom in on ${esc(`art by ${name}: ${p.title}`)}"><img src="${esc(p.url)}" alt=""><span class="zoom-cue" aria-hidden="true">${icon('zoom')}</span></button></div>
       <div class="post-actions">
         <button type="button" class="react react-heart" data-action="c-react" data-post="${p.id}" data-kind="heart" data-count="${hearts.length}" aria-pressed="${myHeart}">
           ${icon('heart')}<span class="sr-only">Like</span><span class="react-count">${hearts.length}</span></button>

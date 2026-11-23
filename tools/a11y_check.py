@@ -200,6 +200,14 @@ FOCUS_JS = r"""
 """
 
 
+def open_aside(pg, which):
+    pg.click(f'#dock-{which}'); pg.wait_for_selector(f'#aside-{which}:not([hidden])'); time.sleep(0.25)
+
+
+def close_aside(pg):
+    pg.click('.aside:not([hidden]) [data-action="close-aside"]'); time.sleep(0.15)
+
+
 def run_checks(pg, label, results, tab_steps=45):
     issues = pg.evaluate(CHECK_JS)
     # 2.4.7 focus visible and 2.1.1 keyboard
@@ -234,10 +242,12 @@ def main():
         pg.goto(BASE + '#/ideas'); pg.wait_for_selector('.idea'); run_checks(pg, 'Ideas (starter)', results)
         pg.goto(BASE + '#/snap'); pg.wait_for_selector('.snap-card'); run_checks(pg, 'Snap page (empty)', results)
         pg.goto(BASE + '#/canvas'); pg.wait_for_selector('#stage canvas'); time.sleep(0.3)
-        pg.click('[data-tool="blend"]'); time.sleep(0.1)
-        run_checks(pg, 'Blank canvas (blend tool and strength)', results, 30)
-        pg.click('[data-tool="blend"]'); time.sleep(0.1)  # second tap opens the blend sizes
-        run_checks(pg, 'Blank canvas (blend sizes open)', results, 30)
+        run_checks(pg, 'Blank canvas (full screen, panels closed)', results, 30)
+        open_aside(pg, 'tools'); pg.click('[data-tool="blend"]'); time.sleep(0.1)
+        run_checks(pg, 'Blank canvas (tools panel, blend and strength)', results, 30)
+        close_aside(pg); open_aside(pg, 'colors')
+        run_checks(pg, 'Blank canvas (colors panel)', results, 30)
+        close_aside(pg)
         pg.goto(BASE + '#/home'); pg.wait_for_selector('.link-tile')
         pg.set_input_files('#snap-input', TEST_IMAGE); pg.wait_for_selector('.fb')
         run_checks(pg, 'Review photo', results)
@@ -247,19 +257,38 @@ def main():
         pg.click('.thumb-link'); pg.wait_for_selector('.piece-title'); time.sleep(0.2); run_checks(pg, 'Piece', results)
         pg.click('[data-action="toggle-favorite"]'); time.sleep(0.2)
         run_checks(pg, 'Piece (favorited)', results)
+        # The picture viewer: opens full screen, has zoom buttons as well as pinching, and Escape closes it
+        pg.click('.zoomable'); pg.wait_for_selector('dialog.viewer[open]'); time.sleep(0.3)
+        run_checks(pg, 'Picture viewer', results, 12)
+        pg.click('[data-viewer="in"]'); pg.click('[data-viewer="in"]'); time.sleep(0.2)
+        run_checks(pg, 'Picture viewer (zoomed in)', results, 12)
+        pg.keyboard.press('Escape'); time.sleep(0.2)
+        if pg.evaluate("() => !!document.querySelector('dialog.viewer[open]') || !document.activeElement.classList.contains('zoomable')"):
+            results['Picture viewer (zoomed in)']['issues'].append({'rule': 'viewer-close', 'sc': '2.1.2', 'el': 'dialog.viewer', 'msg': 'Escape did not close the viewer and return focus to the picture'})
         pg.goto(BASE + '#/home'); pg.wait_for_selector('.fav-row'); time.sleep(0.2); run_checks(pg, 'Home (with favorites)', results)
         pg.goto(BASE + '#/museum'); pg.wait_for_selector('.fav-badge'); time.sleep(0.2); run_checks(pg, 'Museum (favorite heart)', results)
         pg.click('.art-tile'); pg.wait_for_selector('.piece-title'); time.sleep(0.2)
         pg.click('[data-action="draw-piece"]'); pg.wait_for_selector('#stage canvas'); time.sleep(0.3)
+        run_checks(pg, 'Canvas (photo, full screen)', results, 30)
+        open_aside(pg, 'tools'); pg.click('[data-tool="pen"]'); time.sleep(0.1)
+        run_checks(pg, 'Canvas (tools panel)', results, 30)
+        pg.click('[data-action="zoom-in"]'); pg.click('[data-action="zoom-in"]'); close_aside(pg)
+        run_checks(pg, 'Canvas (zoomed in, Fit chip showing)', results, 30)
+        pg.click('#zoom-chip'); time.sleep(0.2)
+        open_aside(pg, 'colors')
         run_checks(pg, 'Canvas (rainbow)', results, 30)
-        pg.click('[data-tool="pen"]'); time.sleep(0.1)  # second tap on selected tool opens sizes
-        run_checks(pg, 'Canvas (sizes open)', results, 30)
         pg.click('#palette-arrow'); time.sleep(0.3)
         run_checks(pg, 'Canvas (neutral)', results, 30)
         pg.click('[data-action="pick-color"][data-i="0"]'); time.sleep(0.1)
         run_checks(pg, 'Canvas (white shades)', results, 30)
         box = pg.locator('.stage-ink').bounding_box()
-        pg.mouse.move(box['x'] + 30, box['y'] + 30); pg.mouse.down(); pg.mouse.move(box['x'] + 200, box['y'] + 120); pg.mouse.up()
+        cx, cy = box['x'] + box['width'] / 2, box['y'] + box['height'] / 2
+        pg.mouse.move(30, cy); pg.mouse.down(); pg.mouse.move(40, cy + 60); pg.mouse.up()  # the strip of drawing left beside the panel: this touch only closes the panel
+        if pg.evaluate("() => (() => { const c = document.querySelector('.stage-ink'); return c.getContext('2d').getImageData(0, 0, c.width, c.height).data; })().some((v, i) => i % 4 === 3 && v > 0)"):
+            results['Canvas (white shades)']['issues'].append({'rule': 'first-touch', 'sc': 'request', 'el': '#stage', 'msg': 'The touch that closes the panel left a mark'})
+        pg.mouse.move(30, cy); pg.mouse.down(); pg.mouse.move(40, cy + 60); pg.mouse.up()
+        if pg.evaluate("() => !document.getElementById('aside-colors').hidden"):
+            results['Canvas (white shades)']['issues'].append({'rule': 'aside-closes', 'sc': 'request', 'el': '#aside-colors', 'msg': 'The side panel stayed open after touching the drawing'})
         pg.click('[data-action="save-drawing"]'); pg.wait_for_selector('dialog[open]')
         run_checks(pg, 'Save dialog', results, 8)
         focus_in = pg.evaluate("() => !!document.activeElement.closest('dialog')")
@@ -286,9 +315,9 @@ def main():
         pg.check('input[name="size"][value="big"]'); time.sleep(0.2)
         run_checks(pg, 'Settings (bigger canvas option on)', results, 20)
         pg.goto(BASE + '#/canvas'); pg.wait_for_selector('#stage canvas'); time.sleep(0.3)
-        pg.click('[data-tool="blend"]'); time.sleep(0.1)
-        run_checks(pg, 'Canvas (bigger text and colors, blend)', results, 30)
-        pg.click('#palette-arrow'); time.sleep(0.3)
+        open_aside(pg, 'tools'); pg.click('[data-tool="blend"]'); time.sleep(0.1)
+        run_checks(pg, 'Canvas (bigger text and colors, tools panel)', results, 30)
+        close_aside(pg); open_aside(pg, 'colors'); pg.click('#palette-arrow'); time.sleep(0.3)
         run_checks(pg, 'Canvas (bigger, neutral colors)', results, 30)
         pg.goto(BASE + '#/ideas'); pg.wait_for_selector('.idea'); run_checks(pg, 'Ideas', results)
         # An idea opens a completely blank canvas, with the Blend tool available
@@ -306,7 +335,7 @@ def main():
         for route, sel, label in [('#/home', '.link-tile', 'Home (black and white)'), ('#/ideas', '.idea', 'Ideas (black and white)'), ('#/friends', '.feed', 'Friends (black and white)')]:
             pg.goto(BASE + route); pg.wait_for_selector(sel); time.sleep(0.2); run_checks(pg, label, results, 30)
         pg.goto(BASE + '#/canvas'); pg.wait_for_selector('#stage canvas'); time.sleep(0.3)
-        pg.click('[data-tool="blend"]'); time.sleep(0.1)
+        open_aside(pg, 'colors')
         run_checks(pg, 'Canvas (black and white style)', results, 30)
         dots = pg.evaluate("() => [...document.querySelectorAll('.swatch')].map((b) => getComputedStyle(b.querySelector('.swatch-dot')).backgroundColor)")
         want = ['rgb(242, 139, 130)', 'rgb(248, 178, 106)', 'rgb(251, 214, 106)', 'rgb(143, 209, 158)', 'rgb(133, 183, 235)', 'rgb(179, 157, 219)', 'rgb(244, 166, 198)']
@@ -328,7 +357,7 @@ def main():
             results[key2] = {'issues': [] if w2 <= 321 else [{'rule': 'resize-text', 'sc': '1.4.4', 'el': route, 'msg': f'Content overflows sideways with 200% text ({w2}px)'}], 'tab_stops': 0}
         # Blend tool and strength row at 320 px, also with 200% text
         sp.goto(BASE + '#/canvas'); sp.reload(); sp.wait_for_selector('#stage canvas'); time.sleep(0.3)  # reload clears the 200% text from the loop above
-        sp.click('[data-tool="blend"]'); sp.click('[data-tool="blend"]'); time.sleep(0.2)
+        sp.click('#dock-tools'); sp.click('[data-tool="blend"]'); time.sleep(0.3)
         sp.evaluate("() => { document.documentElement.dataset.size = 'big'; }"); time.sleep(0.2)
         wb = sp.evaluate("() => document.documentElement.scrollWidth")
         results['Reflow 320px blend tool'] = {'issues': [] if wb <= 321 else [{'rule': 'reflow', 'sc': '1.4.10', 'el': 'blend', 'msg': f'Scrolls sideways at 320px ({wb}px)'}], 'tab_stops': 0}
@@ -343,10 +372,25 @@ def main():
         results['Text spacing'] = {'issues': [] if w3 <= 321 else [{'rule': 'text-spacing', 'sc': '1.4.12', 'el': 'home', 'msg': f'Overflow with extra text spacing ({w3}px)'}], 'tab_stops': 0}
         # 2.3.3 / reduced motion respected
         rm = browser.new_context(viewport={'width': 390, 'height': 844}, reduced_motion='reduce')
-        rp = rm.new_page(); rp.goto(BASE + '#/canvas'); rp.wait_for_selector('#palette-arrow'); time.sleep(0.3)
+        rp = rm.new_page(); rp.goto(BASE + '#/canvas'); rp.wait_for_selector('#palette-arrow', state='attached'); time.sleep(0.3)
+        rp.click('#dock-colors'); time.sleep(0.4)
         rp.click('#palette-arrow')
         dur = rp.evaluate("() => getComputedStyle(document.getElementById('swatches')).animationDuration")
         results['Reduced motion'] = {'issues': [] if dur in ('1e-05s', '0.00001s', '0s') else [{'rule': 'reduced-motion', 'sc': '2.3.3', 'el': '#swatches', 'msg': f'Animation runs with reduced motion on ({dur})'}], 'tab_stops': 0}
+        # iPad and other screen shapes: the drawing fills the screen and the panels stay usable
+        for label, (vw, vh) in {'iPad portrait': (820, 1180), 'iPad landscape': (1180, 820), 'Phone sideways': (844, 390)}.items():
+            ictx = browser.new_context(viewport={'width': vw, 'height': vh}, has_touch=True)
+            ip = ictx.new_page(); ip.goto(BASE + '#/canvas'); ip.wait_for_selector('#stage canvas'); time.sleep(0.3)
+            rect = ip.evaluate("() => { const r = document.getElementById('stage').getBoundingClientRect(); return [r.left, r.top, r.right, r.bottom]; }")
+            run_checks(ip, f'{label} full screen', results, 30)
+            if not (rect[0] <= 1 and rect[1] <= 1 and rect[2] >= vw - 1 and rect[3] >= vh - 1):
+                results[f'{label} full screen']['issues'].append({'rule': 'full-screen', 'sc': 'request', 'el': '#stage', 'msg': f'Drawing does not fill the screen: {rect} on {vw}x{vh}'})
+            open_aside(ip, 'tools'); run_checks(ip, f'{label} tools panel', results, 30)
+            close_aside(ip); open_aside(ip, 'colors'); run_checks(ip, f'{label} colors panel', results, 30)
+            clipped = ip.evaluate("() => { const a = document.querySelector('.aside:not([hidden])'); return a.scrollWidth > a.clientWidth + 1; }")
+            if clipped:
+                results[f'{label} colors panel']['issues'].append({'rule': 'reflow', 'sc': '1.4.10', 'el': '.aside', 'msg': 'Side panel content is cut off sideways'})
+            ictx.close()
         browser.close()
     results['_errors'] = errors
     json.dump(results, open(RESULTS, 'w'), indent=2)

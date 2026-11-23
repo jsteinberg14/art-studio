@@ -7,6 +7,7 @@ import { makeIdeas } from './ideas.js';
 import { FRIENDS, SAMPLE_POSTS, SAMPLE_COMMENTS } from './sample.js';
 import { cloudEnabled } from './cloud.js';
 import { createCloudFriends } from './friends.js';
+import { openViewer } from './zoom.js';
 
 const APP_NAME = 'My Art Studio';
 const main = document.getElementById('main');
@@ -177,6 +178,9 @@ const friendById = (id) => FRIENDS.find((f) => f.id === id) || { id, name: 'You'
 const avatar = (person, cls = '') => `<span class="avatar tone-${person.tone} ${cls}" aria-hidden="true">${esc(person.name.charAt(0))}</span>`;
 
 /* ---------- Screens ---------- */
+// A picture that opens full screen so it can be zoomed (pinch, double-tap, or the zoom buttons).
+const zoomable = (src, alt) => `<button type="button" class="zoomable" data-action="zoom-image" data-src="${esc(src)}" data-alt="${esc(alt)}" aria-label="Zoom in on ${esc(alt)}"><img src="${esc(src)}" alt=""><span class="zoom-cue" aria-hidden="true">${icon('zoom')}</span></button>`;
+
 const sparkSvg = (cls) => `<svg class="spark ${cls}" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 0C13 7 17 11 24 12C17 13 13 17 12 24C11 17 7 13 0 12C7 11 11 7 12 0Z"/></svg>`;
 
 async function homeScreen() {
@@ -251,7 +255,7 @@ async function reviewScreen() {
   if (!pending) { location.replace('#/snap'); return snapScreen(); }
   return frag(`
     ${backBar('Your art', '#/snap', 'Back to Snap')}
-    <div class="photo-frame"><img src="${pending.url}" alt="The picture you just took of your art"></div>
+    <div class="photo-frame">${zoomable(pending.url, 'the picture you just took of your art')}</div>
     <section class="block" aria-labelledby="fb-h">
       <h2 id="fb-h" class="section-label">Feedback</h2>
       ${feedbackCards(pending.feedback)}
@@ -303,7 +307,7 @@ async function pieceScreen(id) {
         <button type="button" class="icon-btn" data-action="delete-piece" data-id="${p.id}" aria-label="Delete ${esc(p.title)}">${icon('trash')}</button>
       </div>
     </header>
-    <div class="photo-frame"><img src="${pieceUrl(p, 'full')}" alt="${esc(p.title)}"></div>
+    <div class="photo-frame">${zoomable(pieceUrl(p, 'full'), p.title)}</div>
     <h1 tabindex="-1" class="piece-title">${esc(p.title)}</h1>
     <p class="sub">${fmtDate(p.createdAt, true)}</p>
     ${p.feedback ? `<section class="block" aria-labelledby="pfb-h"><h2 id="pfb-h" class="section-label">Feedback</h2>${feedbackCards(p.feedback)}</section>` : ''}
@@ -386,7 +390,7 @@ async function friendsScreen() {
         return `<li><article class="post" aria-labelledby="post-${p.id}">
           <div class="post-head">${avatar(p.person, 'avatar-sm')}
             <div><p class="post-name" id="post-${p.id}">${esc(p.person.name)}</p><p class="post-time">${esc(p.ago)}</p></div></div>
-          <div class="post-art"><img src="${p.img}" alt="Art by ${esc(p.person.name)}: ${esc(p.title)}"></div>
+          <div class="post-art">${zoomable(p.img, `Art by ${p.person.name}: ${p.title}`)}</div>
           <div class="post-actions">
             <button type="button" class="react react-heart" data-action="react" data-post="${p.id}" data-kind="heart" data-base="${p.hearts}" aria-pressed="${!!r.heart}">
               ${icon('heart')}<span class="sr-only">Like</span><span class="react-count">${p.hearts + (r.heart ? 1 : 0)}</span></button>
@@ -493,7 +497,7 @@ const PALETTES = [
   { label: 'Rainbow colors', start: 0, colors: [['Red', '#F28B82'], ['Orange', '#F8B26A'], ['Yellow', '#FBD66A'], ['Green', '#8FD19E'], ['Blue', '#85B7EB'], ['Purple', '#B39DDB'], ['Pink', '#F4A6C6']] },
   { label: 'Neutral colors', start: 3, colors: [['White', '#FFFFFF'], ['Light tan', '#E8D5B7'], ['Tan', '#C69C6D'], ['Brown', '#8B5E3C'], ['Dark brown', '#5A3A22'], ['Gray', '#888780'], ['Black', '#1F1F1F']] },
 ];
-const cv = { tool: 'pen', pal: 0, base: 0, color: '#F28B82', sizesOpen: false, size: { pen: 0, marker: 2, brush: 2, blend: 1, eraser: 2 }, strength: 1 };
+const cv = { tool: 'pen', pal: 0, base: 0, color: '#F28B82', aside: null, size: { pen: 0, marker: 2, brush: 2, blend: 1, eraser: 2 }, strength: 1 };
 
 const edge = (hex) => mix(hex, brightness(hex) < 60 ? 0.45 : -0.45);
 function shadesFor(name, hex) {
@@ -507,69 +511,100 @@ function shadesFor(name, hex) {
 function canvasScreen() {
   if (!canvasJob) canvasJob = { blob: null, title: 'My drawing', idea: null, back: '#/home' };
   return frag(`
-    <header class="bar">
-      <button type="button" class="icon-btn" data-action="leave-canvas" aria-label="Back">${icon('chevronLeft')}</button>
-      <h1 tabindex="-1">${canvasJob.idea ? 'Try your idea' : (canvasJob.blob ? 'Draw on it' : 'Blank canvas')}</h1>
-      <span class="bar-spacer"></span>
-    </header>
-    ${canvasJob.idea ? `<p class="idea-banner">${icon('bulb')}<span>${esc(canvasJob.idea)}</span></p>` : ''}
-    <div class="stage-wrap"><div class="stage" id="stage"></div></div>
-    <div class="tool-row">
-      <div class="tools" role="group" aria-label="Drawing tools">
-        ${toolsFor(canvasJob).map((t) => `<button type="button" class="tool" data-tool="${t.id}" data-fk="tool-${t.id}" aria-pressed="false" aria-label="${t.label}">${icon(t.icon)}</button>`).join('')}
+    <div class="canvas-screen">
+      <div class="stage-wrap ${canvasJob.blob ? 'is-photo' : 'is-blank'}"><div class="stage" id="stage"></div></div>
+      <button type="button" class="icon-btn float-back" data-action="leave-canvas" aria-label="Back">${icon('chevronLeft')}</button>
+      <h1 class="sr-only" tabindex="-1">${canvasJob.idea ? 'Try your idea' : (canvasJob.blob ? 'Draw on it' : 'Blank canvas')}</h1>
+      ${canvasJob.idea ? `<p class="idea-banner">${icon('bulb')}<span>${esc(canvasJob.idea)}</span></p>` : ''}
+      <button type="button" class="zoom-chip" id="zoom-chip" data-action="zoom-fit" hidden><span id="zoom-chip-pct">100%</span><span>Fit to screen</span></button>
+      <div class="dock" id="dock" role="group" aria-label="Drawing menu">
+        <button type="button" class="dock-btn dock-save" data-action="save-drawing" aria-label="Save to museum">${icon('check')}</button>
+        <button type="button" class="dock-btn dock-undo" data-action="undo" aria-label="Undo">${icon('undo')}</button>
+        <button type="button" class="dock-btn" id="dock-colors" data-action="open-aside" data-aside="colors" aria-expanded="false" aria-controls="aside-colors" aria-label="Colors"><span class="dock-color" id="dock-color"></span></button>
+        <button type="button" class="dock-btn dock-tools" id="dock-tools" data-action="open-aside" data-aside="tools" aria-expanded="false" aria-controls="aside-tools" aria-label="Tools"></button>
       </div>
-      <button type="button" class="tool tool-undo" data-action="undo" aria-label="Undo">${icon('undo')}</button>
-    </div>
-    <div class="size-row"><div id="sizes" class="sizes"></div><span class="preview-wrap" aria-hidden="true"><span id="preview" class="preview"></span></span></div>
-    <div class="strength-row" id="strengths" hidden></div>
-    <div class="color-row" id="color-row">
-      <div id="swatches" class="swatches" role="group"></div>
-      <button type="button" id="palette-arrow" class="arrow-btn" data-action="switch-palette" data-fk="arrow"></button>
-    </div>
-    <div id="shades" class="shades" role="group"></div>
-    <div class="btn-row canvas-actions">
-      <button type="button" class="btn" data-action="start-over">Start over</button>
-      <button type="button" class="btn btn-primary" data-action="save-drawing">Save to museum</button>
+      <aside class="aside" id="aside-tools" aria-label="Tools" hidden>
+        <div class="aside-head"><h2 class="aside-title" tabindex="-1">Tools</h2>
+          <button type="button" class="icon-btn" data-action="close-aside" aria-label="Close tools">${icon('close')}</button></div>
+        <div class="tools" role="group" aria-label="Drawing tools">
+          ${toolsFor(canvasJob).map((t) => `<button type="button" class="tool" data-tool="${t.id}" data-fk="tool-${t.id}" aria-pressed="false" aria-label="${t.label}">${icon(t.icon)}<span class="tool-label">${t.label}</span></button>`).join('')}
+        </div>
+        <p class="aside-label">Size</p>
+        <div class="size-row"><div id="sizes" class="sizes"></div><span class="preview-wrap" aria-hidden="true"><span id="preview" class="preview"></span></span></div>
+        <div class="strength-row" id="strengths" hidden></div>
+        <p class="aside-label">Zoom</p>
+        <div class="zoom-row" role="group" aria-label="Zoom the drawing">
+          <button type="button" class="zoom-btn" data-action="zoom-out" aria-label="Zoom out">${icon('minus')}</button>
+          <span class="zoom-pct" id="zoom-pct" role="status">100%</span>
+          <button type="button" class="zoom-btn" data-action="zoom-in" aria-label="Zoom in">${icon('plus')}</button>
+          <button type="button" class="btn btn-small" data-action="zoom-fit">Fit</button>
+        </div>
+        <p class="aside-hint">You can also pinch the drawing with two fingers.</p>
+        <button type="button" class="btn btn-small block-btn" data-action="start-over">Start over</button>
+      </aside>
+      <aside class="aside" id="aside-colors" aria-label="Colors" hidden>
+        <div class="aside-head"><h2 class="aside-title" tabindex="-1">Colors</h2>
+          <button type="button" class="icon-btn" data-action="close-aside" aria-label="Close colors">${icon('close')}</button></div>
+        <div class="color-row" id="color-row">
+          <div id="swatches" class="swatches" role="group"></div>
+          <button type="button" id="palette-arrow" class="arrow-btn" data-action="switch-palette" data-fk="arrow"></button>
+        </div>
+        <p class="aside-label">Shades</p>
+        <div id="shades" class="shades" role="group"></div>
+      </aside>
     </div>`);
 }
+
+function openAside(name) {
+  cv.aside = name;
+  main.querySelectorAll('.aside').forEach((el) => { el.hidden = el.id !== `aside-${name}`; });
+  const dock = main.querySelector('#dock'); if (dock) dock.hidden = true;
+  const title = main.querySelector(`#aside-${name} .aside-title`); if (title) title.focus();
+}
+function closeAside(restoreFocus) {
+  const name = cv.aside;
+  if (!name) return;
+  cv.aside = null;
+  main.querySelectorAll('.aside').forEach((el) => { el.hidden = true; });
+  const dock = main.querySelector('#dock'); if (dock) dock.hidden = false;
+  if (restoreFocus) { const b = main.querySelector(`[data-action="open-aside"][data-aside="${name}"]`); if (b) b.focus(); }
+}
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && cv.aside && !document.querySelector('dialog[open]')) closeAside(true);
+});
+
+// Keep the drawing full screen when an iPad (or any device) is turned or resized.
+let refitTimer = null;
+window.addEventListener('resize', () => {
+  clearTimeout(refitTimer);
+  refitTimer = setTimeout(() => { if (drawing && drawing.stage.isConnected) drawing.refit(); }, 120);
+});
+window.addEventListener('orientationchange', () => {
+  clearTimeout(refitTimer);
+  refitTimer = setTimeout(() => { if (drawing && drawing.stage.isConnected) drawing.refit(); }, 300);
+});
 
 async function setupCanvas() {
   const stage = document.getElementById('stage');
   if (cv.tool === 'blend' && canvasJob.blob) cv.tool = 'pen';
+  cv.aside = null;
   drawing = new Drawing(stage);
   drawing.ink.setAttribute('role', 'img');
   drawing.ink.setAttribute('aria-label', canvasJob.blob ? 'Drawing area on top of your picture. Draw with your finger or Apple Pencil.' : 'Blank drawing area. Draw with your finger or Apple Pencil.');
-  try { await drawing.setBackground(canvasJob.blob); } catch (e) { say(e.message); }
-  cv.sizesOpen = false;
+  try { await drawing.setBackground(canvasJob.blob, true); } catch (e) { say(e.message); }
+  drawing.zoom.onChange = (z) => {
+    const pct = main.querySelector('#zoom-pct'); if (pct) pct.textContent = `${z.percent}%`;
+    const chip = main.querySelector('#zoom-chip'); if (chip) { chip.hidden = !z.zoomed; main.querySelector('#zoom-chip-pct').textContent = `${z.percent}%`; }
+  };
   renderControls();
-
-  const tools = main.querySelector('.tools');
-  let holdTimer = null;
-  let held = false;
-  tools.addEventListener('pointerdown', (e) => {
+  // Touching the drawing folds the side panel away so the whole screen is for drawing.
+  // The first touch only closes the panel; it doesn't leave a mark.
+  stage.addEventListener('pointerdown', (e) => { if (cv.aside) { e.stopPropagation(); closeAside(false); } }, true);
+  main.querySelector('.tools').addEventListener('click', (e) => {
     const b = e.target.closest('[data-tool]');
     if (!b) return;
-    held = false;
-    clearTimeout(holdTimer);
-    holdTimer = setTimeout(() => {
-      held = true;
-      cv.tool = b.dataset.tool;
-      cv.sizesOpen = true;
-      renderControls();
-      if (navigator.vibrate) navigator.vibrate(10);
-    }, 450);
-  });
-  for (const type of ['pointerup', 'pointerleave', 'pointercancel']) tools.addEventListener(type, () => clearTimeout(holdTimer));
-  tools.addEventListener('contextmenu', (e) => e.preventDefault());
-  tools.addEventListener('click', (e) => {
-    const b = e.target.closest('[data-tool]');
-    if (!b) return;
-    if (held) { held = false; return; }
-    const keyboard = e.detail === 0;
-    if (cv.tool === b.dataset.tool) cv.sizesOpen = !cv.sizesOpen;
-    else { cv.tool = b.dataset.tool; cv.sizesOpen = false; }
+    cv.tool = b.dataset.tool;
     renderControls();
-    if (keyboard && cv.sizesOpen) { const s = main.querySelector('.size-btn[aria-pressed="true"]'); if (s) s.focus(); }
   });
 }
 
@@ -580,20 +615,14 @@ function renderControls() {
   main.querySelectorAll('[data-tool]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.tool === cv.tool)));
 
   const sizes = main.querySelector('#sizes');
-  if (cv.sizesOpen) {
-    sizes.setAttribute('role', 'group');
-    sizes.setAttribute('aria-label', `${tool.label} size`);
-    const blend = cv.tool === 'blend';
-    sizes.innerHTML = (blend ? BLEND_SIZES : SIZE_STEPS).map((s, i) => {
-      const dot = blend ? Math.min(26, Math.round(s.px * 0.38)) : Math.min(s.px, 22);
-      return `<button type="button" class="size-btn" data-action="pick-size" data-i="${i}" data-fk="size-${i}" aria-pressed="${cv.size[cv.tool] === i}">
+  sizes.setAttribute('role', 'group');
+  sizes.setAttribute('aria-label', `${tool.label} size`);
+  const isBlend = cv.tool === 'blend';
+  sizes.innerHTML = (isBlend ? BLEND_SIZES : SIZE_STEPS).map((s, i) => {
+    const dot = isBlend ? Math.min(26, Math.round(s.px * 0.38)) : Math.min(s.px, 22);
+    return `<button type="button" class="size-btn" data-action="pick-size" data-i="${i}" data-fk="size-${i}" aria-pressed="${cv.size[cv.tool] === i}">
       <span class="size-dot" style="width:${dot}px;height:${dot}px"></span><span class="sr-only">${s.label}</span></button>`;
-    }).join('');
-  } else {
-    sizes.removeAttribute('role');
-    sizes.removeAttribute('aria-label');
-    sizes.innerHTML = '<span class="size-hint">Tap the tool again or hold it to change its size</span>';
-  }
+  }).join('');
 
   const pal = PALETTES[cv.pal];
   const row = main.querySelector('#color-row');
@@ -603,9 +632,16 @@ function renderControls() {
   sw.innerHTML = pal.colors.map(([name, hex], i) => `<button type="button" class="swatch" data-action="pick-color" data-i="${i}" data-fk="sw-${cv.pal}-${i}" aria-pressed="${cv.base === i}" aria-label="${name}" style="--c:${hex};--edge:${edge(hex)}"><span class="swatch-dot"></span></button>`).join('');
   const arrow = main.querySelector('#palette-arrow');
   arrow.setAttribute('aria-label', cv.pal === 0 ? 'Show neutral colors' : 'Back to rainbow colors');
-  arrow.innerHTML = icon(cv.pal === 0 ? 'chevronRight' : 'chevronLeft');
+  arrow.innerHTML = `${icon(cv.pal === 0 ? 'chevronRight' : 'chevronLeft')}<span>${cv.pal === 0 ? 'Neutral colors' : 'Rainbow colors'}</span>`;
 
   const [baseName, baseHex] = pal.colors[cv.base];
+  const colorName = (shadesFor(baseName, baseHex).find(([, hex]) => hex === cv.color) || [baseName])[0];
+  const dockColors = main.querySelector('#dock-colors');
+  dockColors.setAttribute('aria-label', `Colors, now ${colorName.toLowerCase()}`);
+  main.querySelector('#dock-color').style.background = cv.color;
+  const dockTools = main.querySelector('#dock-tools');
+  dockTools.setAttribute('aria-label', `Tools, now ${tool.label.toLowerCase()}`);
+  dockTools.innerHTML = icon(tool.icon);
   const shades = main.querySelector('#shades');
   shades.setAttribute('aria-label', `Shades of ${baseName.toLowerCase()}`);
   shades.innerHTML = shadesFor(baseName, baseHex).map(([name, hex], i) => `<button type="button" class="shade" data-action="pick-shade" data-hex="${hex}" data-fk="sh-${i}" aria-pressed="${cv.color === hex}" aria-label="${name}" style="--c:${hex};--edge:${edge(hex)}"></button>`).join('');
@@ -831,12 +867,15 @@ const actions = {
       go(`#/piece/${piece.id}`);
     } catch (e) { say(e.message || 'Saving failed. Try again.'); }
   },
+  'zoom-image': (el) => openViewer(document.getElementById('viewer'), el.dataset.src, el.dataset.alt, { close: icon('close'), plus: icon('plus'), minus: icon('minus') }),
+  'zoom-in': () => { if (drawing) drawing.zoom.zoomBy(1.5); },
+  'zoom-out': () => { if (drawing) drawing.zoom.zoomBy(1 / 1.5); },
+  'zoom-fit': () => { if (drawing) drawing.zoom.reset(); },
+  'open-aside': (el) => openAside(el.dataset.aside),
+  'close-aside': () => closeAside(true),
   'pick-size': (el) => {
     cv.size[cv.tool] = Number(el.dataset.i);
-    cv.sizesOpen = false;
-    const toolButton = main.querySelector(`[data-tool="${cv.tool}"]`);
     renderControls();
-    if (toolButton) toolButton.focus();
   },
   'pick-strength': (el) => { cv.strength = Number(el.dataset.i); renderControls(); },
   'pick-color': (el) => {
